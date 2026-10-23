@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Board, BoardEvent, Grant, HostRequest, HostResponse, WidgetLibraryEntry } from '@dsh-widget-board/contracts'
 import { PLUGIN_ROUTE, grantKey } from '@dsh-widget-board/contracts'
+import { BOARD_TITLE_LIMIT } from '@dsh-widget-board/contracts'
 import type { RouteContext } from '../src/routes'
 import { createHandler } from '../src/routes'
 import { readManyInto } from '../src/batch-reads'
@@ -277,6 +278,37 @@ describe('看板的增删改与选中', () => {
   it('空标题被拒绝', async () => {
     const response = await (await harness()).send('POST', '/boards/board/rename', JSON.stringify({ title: '   ' }))
     expect(response.status).toBe(400)
+  })
+
+  it('八十个字符的标题可以存下，八十一个被拒绝', async () => {
+    const test = await harness()
+    const limit = '好'.repeat(BOARD_TITLE_LIMIT)
+    const saved = await test.send('POST', '/boards/board/rename', JSON.stringify({ title: limit }))
+    expect(saved.status).toBe(200)
+    expect(test.context.workspace.board('board').title).toBe(limit)
+    const longer = await test.send('POST', '/boards/board/rename', JSON.stringify({ title: `${limit}好` }))
+    expect(longer.status).toBe(400)
+    expect((JSON.parse(longer.body) as { error: string }).error).toContain(String(BOARD_TITLE_LIMIT))
+    expect(test.context.workspace.board('board').title).toBe(limit)
+  })
+
+  it('长度按字符计，星号表情不额外占位', async () => {
+    const test = await harness()
+    const title = '📌'.repeat(BOARD_TITLE_LIMIT)
+    const response = await test.send('POST', '/boards/board/rename', JSON.stringify({ title }))
+    expect(response.status).toBe(200)
+    expect(test.context.workspace.board('board').title).toBe(title)
+  })
+
+  it('新建看板也受同一份标题规则约束', async () => {
+    const test = await harness()
+    const tooLong = await test.send('POST', '/boards', JSON.stringify({ title: '好'.repeat(BOARD_TITLE_LIMIT + 1) }))
+    expect(tooLong.status).toBe(400)
+    const blank = await test.send('POST', '/boards', JSON.stringify({ title: '  ' }))
+    expect(blank.status).toBe(400)
+    const named = await test.send('POST', '/boards', JSON.stringify({ title: ' 工作 ' }))
+    expect(named.status).toBe(201)
+    expect((JSON.parse(named.body) as { snapshot: { boards: Board[] } }).snapshot.boards[1]?.title).toBe('工作')
   })
 
   it('移除一块看板：文件与索引都不再提它', async () => {
