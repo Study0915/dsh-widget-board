@@ -414,4 +414,43 @@ async function overflowPass(page, { check }) {
     await sleep(400)
   }
 }
-module.exports = { boardManagementPass, overflowPass }
+/**
+ * 减弱动效下菜单与弹窗直接出现，不跑补间。
+ *
+ * @param page - 按 `reduce` 渲染的宿主页面。
+ * @param context - 这一层共用的判定。
+ */
+async function reducedMotionPass(page, { check }) {
+  await page.waitForSelector(TABS, { timeout: 10000 })
+  const before = await strip(page)
+  const base = before.selected
+  check('减弱动效下标签仍有一枚更多按钮', base !== null && await page.locator(MORE).count() >= 1, JSON.stringify(before.ids))
+  const open = async (selector) => {
+    await page.locator(MORE).first().click()
+    await page.waitForSelector(MENU, { timeout: 5000 })
+    await page.locator(selector).click()
+    await sleep(150)
+    return await page.evaluate((target) => {
+      const node = document.querySelector(target)
+      if (node === null) return null
+      const style = getComputedStyle(node)
+      return { animation: style.animationName, duration: style.animationDuration, opacity: style.opacity, transform: style.transform }
+    }, selector === MENU_REMOVE ? DELETE : RENAME)
+  }
+  try {
+    const rename = await open(MENU_RENAME)
+    check('减弱动效下改名弹窗直接就在位', rename !== null && rename.animation === 'none' && rename.opacity === '1' && rename.transform !== 'none',
+      JSON.stringify(rename))
+    await page.keyboard.press('Escape')
+    await page.waitForSelector(RENAME, { state: 'detached', timeout: 5000 })
+    const remove = await open(MENU_REMOVE)
+    check('减弱动效下删除确认直接就在位', remove !== null && remove.animation === 'none' && remove.opacity === '1', JSON.stringify(remove))
+    await page.locator(DELETE_CANCEL).click()
+    await page.waitForSelector(DELETE, { state: 'detached', timeout: 5000 })
+  } finally {
+    const ids = (await strip(page)).ids
+    check('减弱动效这一趟没有动看板', JSON.stringify(ids) === JSON.stringify(before.ids), `${JSON.stringify(ids)} / ${JSON.stringify(before.ids)}`)
+  }
+}
+
+module.exports = { boardManagementPass, overflowPass, reducedMotionPass }
