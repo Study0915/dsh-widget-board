@@ -29,7 +29,7 @@
 .dsh-widget-board__board-menu-title {
   margin: 2px 6px 4px;
   overflow: hidden;
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
   font-family: var(--dsh-widget-board-mono);
   font-size: 10px;
   letter-spacing: 0.06em;
