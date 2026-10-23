@@ -224,13 +224,14 @@ export interface DeleteBoardDialogProps {
  */
 export function DeleteBoardDialog({ board, anchor, boardCount, busy, failure, onConfirm, onCancel }: DeleteBoardDialogProps): ReactNode {
   const dialogRef = useRef<HTMLDivElement | null>(null)
-  const confirmRef = useRef<HTMLButtonElement | null>(null)
+  const cancelRef = useRef<HTMLButtonElement | null>(null)
   const facts = factsOf(board)
 
+  // 焦点落在取消上：这一步删掉的东西不能撤销，默认按键不该是「删」。
   useEffect(() => {
     const dialog = dialogRef.current
     if (dialog === null) return
-    confirmRef.current?.focus()
+    cancelRef.current?.focus()
     return trapFocus(dialog, onCancel)
   }, [onCancel])
 
@@ -260,11 +261,17 @@ export function DeleteBoardDialog({ board, anchor, boardCount, busy, failure, on
           {failure === null ? null : <p className="dsh-widget-board__board-dialog-note" data-state="error">{failure}</p>}
         </div>
         <footer className="dsh-widget-board__board-dialog-foot">
-          <button type="button" className="dsh-widget-board__board-dialog-ghost" data-dsh-widget-board-delete-cancel="" onClick={onCancel} disabled={busy}>
+          <button
+            ref={cancelRef}
+            type="button"
+            className="dsh-widget-board__board-dialog-ghost"
+            data-dsh-widget-board-delete-cancel=""
+            onClick={onCancel}
+            disabled={busy}
+          >
             {t('cancel')}
           </button>
           <button
-            ref={confirmRef}
             type="button"
             className="dsh-widget-board__board-dialog-danger"
             data-dsh-widget-board-delete-confirm=""

@@ -276,6 +276,8 @@ async function boardManagementPass(page, { check }) {
     check('删除确认写出看板标题', confirm.title.trim() !== '', confirm.title)
     check('删除确认报出格子数与卡片数', /格/.test(confirm.cells) && /张卡片/.test(confirm.cards), `${confirm.cells} / ${confirm.cards}`)
     check('删除确认说明卡片与保存内容一起删除', /不能撤销/.test(confirm.body), confirm.body.slice(0, 60))
+    const deleteFocus = await page.evaluate(() => document.activeElement?.hasAttribute('data-dsh-widget-board-delete-cancel') === true)
+    check('删除确认打开时焦点在取消上', deleteFocus === true, String(deleteFocus))
     await page.locator(DELETE_CANCEL).click()
     await page.waitForSelector(DELETE, { state: 'detached', timeout: 5000 })
 
