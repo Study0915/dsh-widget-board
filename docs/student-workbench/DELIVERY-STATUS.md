@@ -18,7 +18,8 @@
 | workspace父AGENTS | 已编写 |
 | 局部hooks与保护脚本 | 已配置；31/31自检通过 |
 | 文档本地commit及push | 首次提交2851bd6已推送到fork文档分支，后续交付修订同分支保存 |
-| 产品实现T00—T08 | 未开始 |
+| T00 局部环境与基线 | 环境就绪，原版完整 verify 通过（退出码 0）；演示页验收 1 条基线失败（演示宿主缺 `/instance/:id/log` 路由）；浅深色截图已采集、人工核对未执行。详见 [环境基线](ENVIRONMENT-BASELINE.md) |
+| 产品实现T01—T08 | 未开始 |
 
 已运行原项目不依赖安装的ADR索引、CHANGELOG、AGENTS命令表检查，均通过；原作者AGENTS、产品源码与锁文件保持原版。截图副本在.debug/references，不纳入公开提交。
 
@@ -28,8 +29,8 @@
 
 ## 不可继承的验证
 
-本轮没有产品node_modules、完整npm verify、真实宿主功能验证或用户视觉最终确认。DS需从T00建立这些证据。
+文档交付轮没有产品node_modules、完整npm verify、真实宿主功能验证或用户视觉最终确认。T00 已补上依赖、完整 verify（退出码 0）与浅深色采集，条目见上表与 [环境基线](ENVIRONMENT-BASELINE.md)。
 
 ## 下一步
 
-完成文档交付检查后，把DS-HANDOFF中的开工指令交给DS，从T00开始。日常阶段版本允许向fork任务分支commit/push；上游投稿等待以后明确指令。
+T00 之后按 [任务卡](TASKS.md) 逐条推进：T01 看板标签管理、T02 整齐行列可并行规划但需顺序使用同一工作副本。日常阶段版本允许向 fork 任务分支 commit/push；上游投稿等待以后明确指令。演示宿主缺 `/instance/:id/log` 路由这条基线缺陷需要单独立项修复。

@@ -8,6 +8,7 @@
 |---|---|---|
 | 用户审阅整体方案 | [实施计划](IMPLEMENTATION-PLAN.zh-CN.md)、[已确定决策](DECISIONS.md) | 判断产品范围是否符合预期 |
 | DS 开始任务 | [交接指令](DS-HANDOFF.md)、[安全规则](SAFETY-RULES.md)、[任务卡](TASKS.md) | 明确当前任务、分支、允许修改范围 |
+| 核对本机环境与基线 | [环境基线](ENVIRONMENT-BASELINE.md) | 版本、命令退出码、截图与样式读数、尚未执行的核对 |
 | 修改看板管理或排列 | [看板规格](specs/BOARD.md) | 按现有能力新增交互和排列模式 |
 | 修改创建编辑功能 | [编辑器规格](specs/COMPOSER.md) | 区分实例、类型、预览、草稿 |
 | 修改校园功能 | [校园卡片规格](specs/CAMPUS.md) | 按身份维护事项和校园视觉 |
