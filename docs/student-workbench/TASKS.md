@@ -11,7 +11,7 @@
 - 读取：UPSTREAM-AUDIT、原package.json、testing/dsh-web.cjs、scripts/verify.mjs。
 - 操作：在.debug内准备npm缓存、浏览器和独立DSH运行时；核查当前桌面实际DSH版本，精确固定。安装前检查生命周期脚本，不执行来源不明的安装器。
 - 运行：原版完整verify、演示构建/检查，并保存原生及主题浅深色截图。不能把演示宿主当作正式DSH验收。
-- 修改范围：本任务只产生.debug证据和任务记录，不改产品源码。
+- 修改范围：默认只产生.debug证据和任务记录。用户 U16 明确批准例外：仅修复 `packages/demo/src/worker/routes.ts` 的实例日志读取路由，补 `packages/testing/demo.cjs` 回归和对应变更记录；必须完整复验。
 - 退出：环境版本、命令退出码、截图路径清楚；失败属于原基线还是环境明确记录。基线失败先诊断，不通过删除断言继续。
 
 ## T01 看板标签管理

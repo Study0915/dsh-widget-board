@@ -18,7 +18,7 @@ import type {
   InstanceStateRequest,
   WidgetMinBox,
 } from '@dsh-widget-board/contracts'
-import { FLIP_GROUP_BACK, FLIP_GROUP_FRONT, PLUGIN_ROUTE } from '@dsh-widget-board/contracts'
+import { FLIP_GROUP_BACK, FLIP_GROUP_FRONT, PLUGIN_ROUTE, REQUEST_LOG_LIMIT } from '@dsh-widget-board/contracts'
 import { isCardLayout } from '@dsh-widget-board/model'
 import { isRecord } from '../../../host/src/guards'
 import { BOARD_STATE_WRITES_PER_SECOND, STATE_WRITES_PER_SECOND, createRateLimiter } from '../../../host/src/limits'
@@ -344,6 +344,14 @@ const ROUTES: Route[] = [
     },
   },
   { method: 'GET', pattern: /^\/instance\/([^/]+)\/settings$/, handle: async (context, _request, match) => await readSettings(context, decodeURIComponent(match[1] as string)) },
+  {
+    method: 'GET',
+    pattern: /^\/instance\/([^/]+)\/log$/,
+    async handle(context, _request, match) {
+      await requireInstance(context, decodeURIComponent(match[1] as string))
+      return json(200, { entries: [], limit: REQUEST_LOG_LIMIT })
+    },
+  },
   { method: 'POST', pattern: /^\/instance\/([^/]+)\/props$/, handle: async (context, request, match) => await saveProps(context, decodeURIComponent(match[1] as string), request) },
   { method: 'POST', pattern: /^\/instance\/([^/]+)\/read$/, handle: async () => { throw unavailable('数据源', 'data sources') } },
   { method: 'POST', pattern: /^\/instance\/([^/]+)\/action$/, handle: async () => { throw unavailable('动作', 'actions') } },
