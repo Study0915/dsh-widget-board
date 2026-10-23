@@ -125,6 +125,44 @@ async function boardManagementPass(page, { check }) {
     await page.keyboard.press('Escape')
     await page.waitForFunction((selector) => document.querySelector(selector) === null, MENU, { timeout: 5000 })
 
+    // V08：标签的语义与键盘。标签里不能再套按钮，更多按钮自己是一个可聚焦控件，菜单首项拿到焦点，
+    // 方向键在两项之间绕行，aria-expanded 跟着开合走。
+    const semantics = await page.evaluate(({ tabs, tab, more }) => {
+      const strip = document.querySelector(tabs)
+      const groups = Array.from(strip?.querySelectorAll('[data-dsh-widget-board-tab-group]') ?? [])
+      return {
+        // tab 里再套按钮会让读屏把切换与「更多」读成同一个控件。
+        nested: groups.filter((group) => [...(group.querySelector(`${tab}[role="tab"]`)?.querySelectorAll('button') ?? [])].length > 0).length,
+        perGroup: groups.map((group) => group.querySelectorAll('button').length),
+        moreCount: strip === null ? 0 : strip.querySelectorAll(more).length,
+        tabsCount: strip === null ? 0 : strip.querySelectorAll(`${tab}[role="tab"]`).length,
+        expandedClosed: Array.from(strip?.querySelectorAll(more) ?? []).map((node) => node.getAttribute('aria-expanded')),
+        haspops: Array.from(strip?.querySelectorAll(more) ?? []).every((node) => node.getAttribute('aria-haspopup') === 'menu'),
+      }
+    }, { tabs: TABS, tab: TAB, more: MORE })
+    check('切换按钮里没有再套按钮', semantics.nested === 0, JSON.stringify(semantics.perGroup))
+    check('每块标签各有一枚更多按钮，文字按钮才是 tab',
+      semantics.moreCount === semantics.tabsCount && semantics.tabsCount >= 1, JSON.stringify(semantics))
+    check('更多按钮声明自己弹出菜单，收起时 aria-expanded 为假',
+      semantics.haspops === true && semantics.expandedClosed.every((value) => value === 'false'), JSON.stringify(semantics.expandedClosed))
+
+    // 键盘打开：Tab 到更多按钮，回车开菜单，焦点落在第一项。
+    await page.locator(MORE).first().focus()
+    await page.keyboard.press('Enter')
+    await page.waitForSelector(MENU, { timeout: 5000 })
+    const firstFocus = await page.evaluate((selector) => document.activeElement?.getAttribute('data-dsh-widget-board-board-menu-action'), { selector: MENU })
+    check('键盘打开菜单后焦点落在第一项', firstFocus === 'rename', String(firstFocus))
+    const expandedOpen = await page.evaluate((more) => Array.from(document.querySelectorAll(more)).some((node) => node.getAttribute('aria-expanded') === 'true'), MORE)
+    check('菜单开着时 aria-expanded 为真', expandedOpen === true, String(expandedOpen))
+    await page.keyboard.press('ArrowDown')
+    const secondFocus = await page.evaluate(() => document.activeElement?.getAttribute('data-dsh-widget-board-board-menu-action'))
+    await page.keyboard.press('ArrowDown')
+    const wrapped = await page.evaluate(() => document.activeElement?.getAttribute('data-dsh-widget-board-board-menu-action'))
+    check('方向键在两项之间移动并绕回第一项', secondFocus === 'remove' && wrapped === 'rename', `${String(secondFocus)} / ${String(wrapped)}`)
+    await page.keyboard.press('Tab')
+    await page.waitForFunction((selector) => document.querySelector(selector) === null, MENU, { timeout: 5000 })
+    check('Tab 离开菜单时菜单收起', await closed(page))
+
     // B04、B06：改名成功、宽度跟着变。
     const original = await page.locator(`[data-dsh-widget-board-tab="${base}"]`).textContent()
     const widthBefore = (await strip(page)).ids.length === 2 ? (await page.locator(`[data-dsh-widget-board-tab-group="${base}"]`).boundingBox())?.width ?? 0 : 0
