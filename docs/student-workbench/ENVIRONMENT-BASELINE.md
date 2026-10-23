@@ -42,7 +42,7 @@ HTTP 404 /dsh-widget-board/api/widget-board/instance/<id>/log
 
 来源是卡片设置弹窗的日志一节（`packages/client/src/log-panel.tsx` → `snapshot.ts` 的 `fetchInstanceLog`），它挂载时就读一次。这条路由在宿主半边是 `packages/host/src/settings.ts` 的 `GET /instance/<id>/log`（提交 `a282cc9` 加入），演示宿主的 worker 路由表 `packages/demo/src/worker/routes.ts` 里没有对应条目（该文件最后一次改动是 `611dea2`，早于 `a282cc9`）。
 
-结论：这是**上游基线自带的演示宿主缺一条路由**，与本次环境准备无关，也不是本任务引入。基线修复会在 T00 之后单独处理；本任务不改产品源码。
+结论：这是**上游基线自带的演示宿主缺一条路由**。用户随后批准 U16 例外，在 T00 内最小修复：已有实例返回 `{entries: [], limit: REQUEST_LOG_LIMIT}`，未知实例返回 404，POST 返回 405。补充的浏览器回归通过 Service Worker 实测，修复前失败、修复后全部通过；没有修改正式宿主。
 
 同一处检查还有两条「预期内的失败」：数据源 501 与过期 revision 409 会被浏览器记成控制台错误，`demo.cjs` 的 `unsupportedPass` 会先把它们从列表里清掉，所以不算失败。
 
@@ -77,10 +77,17 @@ HTTP 404 /dsh-widget-board/api/widget-board/instance/<id>/log
 
 ## 未执行与已知限制
 
-- **浅深色截图的人工核对未执行**：本会话的模型不具备图像输入能力，无法自己打开 PNG 判断排版、间距、圆角是否与原卡一致。截图已按上面路径保存，客观读数（计算样式、对比度、圆角、阴影）已经取到；V02、V03、V09 的「实际看过」这一层需要用户或有视觉能力的模型补做。
-- 演示页验收有 1 条基线失败（404），见上节。
-- 皮肤主题的 6 条 404 是 `dsh-claude-style` 自己的 Web 字体（`/dsh-claude-style/fonts/Anthropic*Web*.ttf`）在临时宿主里没有对应静态目录，皮肤回退到本地字体显示；这与本插件无关，记录在 `.debug/evidence/T00/claude-404.json`。
+- Codex 已实际打开原生/皮肤浅深色四张 1280×900 截图及两张 1024×768 深色截图。文字、圆角、阴影和控件可读，皮肤保留暖橙强调色；未修改视觉令牌。T00 尚无新版产品 UI，以上是后续任务的原版对照，不能替代未来新版截图或用户最终审美确认。
+- 原演示失败及修复前回归仍保留；修复后 `demo-regression-after.log` 全部通过（33 条），控制台无错误。
+- 字体探针确认皮肤包实际提供 Inter、JetBrains Mono 常规/斜体、Noto Serif 四个文件且路由返回 200，三个 Anthropic 字体文件未打包，返回 404 并回退；不是整个字体静态目录缺失。不得下载来源不明的专有字体补齐。完整读数见 `.debug/evidence/T00/skin-fonts.json`。
 - 本任务没跑真实 Windows 桌面外壳（X04 属于 T08），没用演示宿主代替正式 DSH 验收。
+
+## 中断恢复与补验
+
+- 原字体探针的 `Promise.race` 在成功后没有清理 60 秒计时器。相同代码的隔离回归在修复前已输出结果但 2.5 秒后仍不退出，修复后约 0.4 秒自然退出；拒绝分支同样清理计时器，不使用强制 `process.exit(0)` 掩盖问题。证据为 `timer-regression-before.json` 和 `timer-regression.json`。
+- 修复后完整字体探针另一次运行遭遇 Edge `Target crashed`，退出码 1；已保留 `font-probe-after.log`，没有把这次标成功。之前成功采集的字体读数仍可作为原始证据，计时器修复由隔离回归证明。
+- 产品补丁后的完整 verify 首次因重复代码工具内存分配失败，第二次在单元层发现本地 `vite` 缺失。未修改断言或锁文件；使用局部缓存运行 `npm ci --ignore-scripts --prefer-offline`，退出 0，恢复 71 个包，安装审计 0 漏洞。之后原样重跑完整验收；最终结果以当前指纹的 `.debug/local-review/T00/verify.json` 为准。
+- 本次未更改 `.gitignore`：已有规则覆盖 `.debug/`、依赖、浏览器输出和凭据，新增探针/日志均为忽略文件，不提交真实配置或启动令牌。
 
 ## 推送凭据的处理
 

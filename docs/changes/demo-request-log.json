@@ -1,0 +1,8 @@
+{
+  "group": "fixes",
+  "order": 0,
+  "at": "2026-10-23",
+  "external": false,
+  "zh": "演示宿主补齐卡片请求日志读取：已有卡片返回空日志与统一条数上限，未知卡片仍返回 404，避免打开卡片设置时出现缺失路由错误。",
+  "en": "Add request-log reads to the demo host: existing cards return an empty log with the shared entry limit, while unknown cards return 404, avoiding missing-route errors when opening card settings."
+}

@@ -29,7 +29,7 @@ node .local-guardrails/guard.mjs review-template
 node .local-guardrails/guard.mjs complete
 ```
 
-verify运行原项目`npm run verify`，捕获真实退出码和日志；缺依赖就失败。T00在产品未修改状态运行同一命令。DOCS只运行文档包检查，不跑产品功能测试。
+verify运行原项目`npm run verify`，捕获真实退出码和日志；缺依赖就失败。T00先保留原版结果，再对用户 U16 批准的最小演示修复运行同一完整命令，不能沿用修复前指纹。DOCS只运行文档包检查，不跑产品功能测试。
 
 ## 3. 源码指纹
 

@@ -40,4 +40,4 @@
 
 依赖、缓存、浏览器、局部DSH和截图都在子仓库.debug。T00先核实运行时版本，按锁文件安装。宿主PATH只在子进程环境加入局部CLI，DSH_HOME明确位于.debug。新依赖依照官方文档使用并锁定版本。
 
-当前没有为产品实现安装node_modules，也没有运行产品完整verify；请在T00执行并记录，不能继承本次文档检查结果冒充产品验证。
+T00 已安装局部依赖并记录原版验证与主题截图，详见 ENVIRONMENT-BASELINE.md。用户 U16 允许最小修复演示日志路由；以 `.debug/local-review/T00/verify.json`、`review.json`、`complete.json` 的当前代码指纹判定完成，不能把旧收据当成后续任务的验证结果。下一任务为 T01；尚未实现标签管理、整齐布局或校园卡。
