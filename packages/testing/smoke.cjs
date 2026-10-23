@@ -28,7 +28,7 @@ const { noticePass } = require('./notice.cjs')
 const { openBoard } = require('./panel.cjs')
 const { tabsPass } = require('./tabs.cjs')
 const { titlebarPass } = require('./titlebar.cjs')
-const { boardManagementPass, overflowPass } = require('./board-management.cjs')
+const { boardManagementPass, overflowPass, reducedMotionPass } = require('./board-management.cjs')
 const { providerPass } = require('./provider.cjs')
 const { githubPass } = require('./github.cjs')
 
@@ -727,6 +727,7 @@ start({ home, extras: [join(__dirname, 'fixtures', 'provider')] }).then(async (h
     await titlebarPass(opened.page, { check })
     reduced = await openPage(host.url, { reducedMotion: 'reduce' })
     await reducedPass(reduced.page)
+    await reducedMotionPass(reduced.page, { check })
     const errors = reduced.problems.filter((problem) => problem.startsWith('error:') || problem.startsWith('pageerror:'))
     check('减弱动效下控制台没有错误', errors.length === 0, errors.join(' / '))
     // 看板管理会删光全部看板（最后一块删完的样子也要看），排在所有需要卡片与布局的场景之后。
