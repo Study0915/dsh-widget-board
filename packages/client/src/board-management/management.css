@@ -247,14 +247,18 @@
   color: var(--dsw-alias-label-primary);
 }
 
+/* 删除按钮照宿主的危险样式：错误色写字、同色描边，按下时才铺一层很淡的同色底。
+ * 填满错误色再压白字在深色主题里只有 3.7:1，读不清。 */
 .dsh-widget-board__board-dialog-danger {
-  border: 1px solid transparent;
-  background: var(--dsw-alias-state-error-primary);
-  box-shadow: 0 6px 18px -8px color-mix(in srgb, var(--dsw-alias-state-error-primary) 80%, transparent);
-  color: var(--dsw-alias-label-primary-inverted);
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 30%, transparent);
+  background: transparent;
+  color: var(--dsw-alias-state-error-primary);
 }
 
-.dsh-widget-board__board-dialog-danger:hover:not(:disabled) { filter: brightness(1.06); }
+.dsh-widget-board__board-dialog-danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 55%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 8%, transparent);
+}
 
 .dsh-widget-board__board-dialog-primary:disabled,
 .dsh-widget-board__board-dialog-ghost:disabled,
