@@ -37,6 +37,7 @@ export function defineTool(context: ToolContext): WidgetToolSpec {
           description: 'Relative path to file text. index.html and style.css are required; main.js, samples.json and assets/... are optional.',
         },
         replace: { type: 'boolean', description: 'Allow overwriting an existing widget directory. Without it, an existing id is refused.' },
+        expectedHash: { type: 'string', description: 'Required when updating: the hash read before editing. replace does not bypass this check.' },
         preview: {
           type: 'object',
           additionalProperties: false,
@@ -50,7 +51,7 @@ export function defineTool(context: ToolContext): WidgetToolSpec {
     },
     async execute(args, call) {
       if (!isRecord(args) || typeof args.id !== 'string') throw new ToolRefusal('widget_define 要写明 id')
-      const wanted = args as { id: string, manifest?: unknown, files?: unknown, replace?: unknown, preview?: unknown }
+      const wanted = args as { id: string, manifest?: unknown, files?: unknown, replace?: unknown, expectedHash?: string, preview?: unknown }
       const files = filesOf(wanted.files)
       for (const required of ['index.html', 'style.css']) {
         if (!files.some((file) => file.path === required)) throw new ToolRefusal(`缺少必需的 ${required}（D7）`)
@@ -61,15 +62,12 @@ export function defineTool(context: ToolContext): WidgetToolSpec {
       // 覆盖要显式说清：共享写入服务按 `expectedHash` 核对并发，工具这一处的「覆盖」是人的意思，
       // 服务的核对是机器的事实（技术契约 4）。
       const current = context.route.records.get(wanted.id)
-      const expectedHash = current === undefined
-        ? undefined
-        : wanted.replace === true
-          ? current.hash
-          : undefined
+      const expectedHash = wanted.expectedHash
       if (current !== undefined && wanted.replace !== true) {
         throw new ToolRefusal(`${wanted.id} 已经在组件库里；要覆盖它就带上 replace: true，要另写一个就换一个 id`)
       }
       const written = await writeWidgetType({
+        assets: context.route.live.assets,
         roots: context.route.roots,
         records: () => context.route.records,
         request: { id: wanted.id, manifest: wanted.manifest, files, ...(expectedHash === undefined ? {} : { expectedHash }) },

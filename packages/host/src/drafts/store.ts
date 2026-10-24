@@ -12,12 +12,14 @@ import { randomUUID } from 'node:crypto'
 import type { WidgetDraft, WidgetDraftSummary } from '@dsh-widget-board/contracts'
 import { isRecord } from '../guards'
 import { Refusal } from '../refusal'
+import { binaryInputs, checkWidgetFiles, normalizeWidgetPath } from '../widget-write/write'
 
 /** 草稿目录里最多存几份。 */
 export const DRAFT_LIMIT = 20
 
 /** 一份草稿最多多少字节：按一个组件目录的上限算（技术契约 4）。 */
 export const DRAFT_BYTES_LIMIT = 16 * 1024 * 1024
+const pendingWrites = new Map<string, Promise<void>>()
 
 /** 草稿的存储。 */
 export interface DraftStore {
@@ -136,6 +138,12 @@ export function openDrafts(dir: string): DraftStore {
       }
     },
     async save(draft) {
+      const previous = pendingWrites.get(dir) ?? Promise.resolve()
+      let unlock: () => void = () => {}
+      const pending = new Promise<void>((resolve) => { unlock = resolve })
+      pendingWrites.set(dir, pending)
+      await previous
+      try {
       const id = draft.draftId ?? randomUUID()
       if (!DRAFT_ID_PATTERN.test(id)) throw new Refusal(400, `草稿 id 不合法：${id}`)
       const existing = await this.get(id)
@@ -146,6 +154,11 @@ export function openDrafts(dir: string): DraftStore {
         }
       }
       const stored: WidgetDraft = { ...draft, draftId: id, updatedAt: new Date().toISOString() }
+      const files = Object.entries(stored.files ?? {}).map(([path, content]) => {
+        if (typeof content !== 'string') throw new Refusal(400, '草稿文件内容要是字符串')
+        return { path: normalizeWidgetPath(path), content }
+      })
+      checkWidgetFiles([...files, ...binaryInputs(stored.binaryFiles)])
       if (holdsCredentialValue(stored)) {
         throw new Refusal(400, '草稿里不能带凭据的值；密钥只由宿主的凭据服务保存', { code: 'credential-in-draft' })
       }
@@ -156,10 +169,14 @@ export function openDrafts(dir: string): DraftStore {
       }
       await mkdir(dir, { recursive: true })
       const file = fileOf(id)
-      const temporary = `${file}.tmp`
+      const temporary = `${file}.${randomUUID()}.tmp`
       await writeFile(temporary, text, 'utf8')
       await rename(temporary, file)
       return stored
+      } finally {
+        unlock()
+        if (pendingWrites.get(dir) === pending) pendingWrites.delete(dir)
+      }
     },
     async remove(id) {
       if (!DRAFT_ID_PATTERN.test(id)) return false

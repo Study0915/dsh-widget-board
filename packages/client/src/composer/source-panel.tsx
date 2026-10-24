@@ -9,11 +9,13 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { WidgetSourceModel } from '@dsh-widget-board/contracts'
+import type { WidgetSourceModel, WidgetDraftSummary } from '@dsh-widget-board/contracts'
+import { instanceSourcePath } from '@dsh-widget-board/contracts'
 import { t } from '../copy'
 import type { ShellTheme } from '../theme'
 import { defineWidget, fetchWidgetSource, SourceConflictError } from './source-api'
-import { fetchDraft as fetchDraftRequest, removeDraft as removeDraftRequest, saveDraft as saveDraftRequest } from './source-api'
+import { fetchDrafts, fetchDraft as fetchDraftRequest, removeDraft as removeDraftRequest, saveDraft as saveDraftRequest } from './source-api'
+import { fetchCardContent } from '../snapshot'
 import { suggestedIdOf } from './source-rules'
 import { isRecord } from './schema'
 import { loadSourceEditor } from './source-editor-loader'
@@ -31,13 +33,17 @@ export interface SourceEditorPanelProps {
   onFilesChanged?: (files: Record<string, string>) => void
   /** 关掉面板。 */
   onClose: () => void
+  instanceId?: string
+  onBinaryChanged?: (files: Record<string, string>) => void
+  closeRequest?: number
+  onRestore?: () => void
 }
 
 /** 面板里那几个标签。 */
 const FILES = ['widget.json', 'index.html', 'style.css', 'main.js', 'samples.json'] as const
 
 /** 一个文件。 */
-type FileName = (typeof FILES)[number]
+type FileName = string
 
 /**
  * 主机是不是深色：编辑器按它选配色（D10）。
@@ -59,7 +65,7 @@ function isDark(theme: ShellTheme): boolean {
  * @param props - 组件 id、主题与回调。
  * @returns 面板。
  */
-export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, onClose }: SourceEditorPanelProps): ReactNode {
+export function SourceEditorPanel({ widgetId, instanceId, theme, onSaved, onFilesChanged, onBinaryChanged, onRestore, onClose, closeRequest = 0 }: SourceEditorPanelProps): ReactNode {
   const [model, setModel] = useState<WidgetSourceModel | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -69,6 +75,11 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
   const [files, setFiles] = useState<Record<string, string>>({})
   const [active, setActive] = useState<FileName>('index.html')
   const [saving, setSaving] = useState(false)
+  const [updateAll, setUpdateAll] = useState(false)
+  const [drafts, setDrafts] = useState<WidgetDraftSummary[]>([])
+  const [binaryFiles, setBinaryFiles] = useState<Record<string, string>>({})
+  const revision = useRef<number | null>(null)
+  const baseHash = useRef<string | null>(null)
   /** 关闭时先问一句：存草稿、放弃还是继续编辑（C13）。 */
   const [confirmClose, setConfirmClose] = useState(false)
   /** 这一份草稿的 id：存过一次之后，继续编辑按它更新，不另起一份。 */
@@ -90,15 +101,24 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
     fetchWidgetSource(widgetId).then((next) => {
       if (!live) return
       setModel(next)
+      baseHash.current = next.hash
       // 宿主给的建议 id 优先：它才是真正写盘的那一份判定（C4）。
-      setTargetId(next.writable ? next.id : next.suggestedId ?? suggestedIdOf(next.id, next.source))
+      setTargetId(next.suggestedId ?? suggestedIdOf(next.id, next.source))
       setFiles({ 'widget.json': next.manifest, ...next.files })
+      setBinaryFiles(next.binaryFiles ?? {})
       setActive(next.files['index.html'] === undefined ? 'widget.json' : 'index.html')
     }, (caught: Error) => {
       if (live) setLoadError(caught.message)
     })
     return () => { live = false }
   }, [widgetId])
+
+  useEffect(() => {
+    let live = true
+    fetchDrafts().then((items) => { if (live) setDrafts(items.filter((entry) => entry.kind === 'source')) }, (caught: Error) => { if (live) setError(caught.message) })
+    if (instanceId !== undefined) fetchCardContent(instanceId).then((card) => { revision.current = card.revision }, (caught: Error) => { if (live) setError(caught.message) })
+    return () => { live = false }
+  }, [instanceId])
 
   // 编辑器按需加载：第一次打开高级模式时才去取那个分包（技术契约 4）。
   useEffect(() => {
@@ -117,28 +137,25 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
   //
   // 内容变了不重建：重建会把光标与撤销历史一起丢掉，那正是人在编辑器里要的东西（D11）。
   // 内容灌进编辑器由下面那个效果负责。
-  const createdFor = useRef<string>('')
+  const dark = isDark(theme)
   useEffect(() => {
     if (!editorReady) return
     const host = hostRef.current
     const module = editorModule.current
     if (host === null || module === null) return
-    const key = `${active}|${isDark(theme) ? 'dark' : 'light'}`
-    if (createdFor.current === key) return
-    createdFor.current = key
     const editor = module.createSourceEditor({
       parent: host,
       value: files[active] ?? '',
       kind: module.languageOf(active),
       onChange: (text: string) => { setFiles((previous) => ({ ...previous, [active]: text })) },
-      theme: { dark: isDark(theme) },
+      theme: { dark },
     })
     editorRef.current = editor
     return () => {
       editor.destroy()
       editorRef.current = null
     }
-  }, [editorReady, active, theme])
+  }, [editorReady, active, dark])
 
   // 内容变了灌进编辑器——只在它与编辑器里的不一样时灌，免得把光标顶走。
   useEffect(() => {
@@ -159,6 +176,14 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
   useEffect(() => {
     onFilesChanged?.(files)
   }, [files, onFilesChanged])
+  useEffect(() => { onBinaryChanged?.(binaryFiles) }, [binaryFiles, onBinaryChanged])
+
+  useEffect(() => {
+    if (closeRequest > 0) {
+      if (changed) setConfirmClose(true)
+      else onClose()
+    }
+  }, [closeRequest])
 
   /**
    * 存一份草稿：草稿住在插件自己的目录里，凭据值不进来（技术契约 4、C12）。
@@ -171,9 +196,10 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
     try {
       const saved = await saveDraftRequest({
         ...(draftId === null ? {} : { draftId }),
-        target: { kind: 'widget', widgetId: targetId },
-        base: { hash: model.hash },
+        target: instanceId === undefined ? { kind: 'widget', widgetId } : { kind: 'instance', instanceId },
+        base: { hash: model.hash, ...(revision.current === null ? {} : { revision: revision.current }) },
         files,
+        binaryFiles,
       })
       setDraftId(saved.draftId)
       setDraftSaved(true)
@@ -187,13 +213,20 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
   /**
    * 恢复一份草稿：文件回到编辑器里，人可以接着改（C13）。
    */
-  const restoreDraft = async (): Promise<void> => {
-    if (draftId === null) return
+  const restoreDraft = async (id = draftId): Promise<void> => {
+    if (id === null) return
     setError(null)
     try {
-      const draft = await fetchDraftRequest(draftId)
+      const draft = await fetchDraftRequest(id)
       if (draft.files === undefined) return
+      onRestore?.()
       setFiles(draft.files)
+      setBinaryFiles(draft.binaryFiles ?? {})
+      setDraftId(id)
+      baseHash.current = draft.base.hash ?? model?.hash ?? null
+      if (draft.base.revision !== undefined) revision.current = draft.base.revision
+      setUpdateAll(false)
+      if (draft.base.hash !== model?.hash) setError('草稿的基础组件版本已经变化；请核对后另存，输入已保留。')
       setDraftSaved(true)
     } catch (caught) {
       setError((caught as Error).message)
@@ -212,7 +245,7 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
   }
 
   /**
-   * 写下去：只读源另存为一个新的用户组件，已有用户组件按当前的哈希就地改。
+   * 默认另存；只有显式选择更新全部实例时，才用基础哈希更新原类型。
    */
   const save = async (): Promise<void> => {
     if (model === null || saving) return
@@ -220,20 +253,29 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
     setError(null)
     try {
       const parsed = JSON.parse(files['widget.json'] ?? '{}') as unknown
+      const destination = updateAll && writable ? model.id : targetId
       // manifest 的 id 要与目录名一致（C4）：另存时它跟着目标 id 一起改，就地改时不动。
-      const manifest = isRecord(parsed) ? { ...parsed, id: targetId } : parsed
+      const manifest = isRecord(parsed) ? { ...parsed, id: destination } : parsed
       const rest: Record<string, string> = {}
       for (const [path, text] of Object.entries(files)) {
         if (path === 'widget.json') continue
         rest[path] = text
       }
       const written = await defineWidget({
-        id: targetId,
+        id: destination,
         manifest,
         files: rest,
-        ...(writable && targetId === model.id ? { expectedHash: model.hash } : {}),
+        binaryFiles,
+        ...(updateAll && writable ? { expectedHash: baseHash.current ?? model.hash } : {}),
       })
-      // 正式保存成功之后，这一��草稿就可以删掉了（技术契约 4）。
+      if (!updateAll && instanceId !== undefined) {
+        const response = await fetch(instanceSourcePath(instanceId), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ widget: written.id, expectedHash: written.hash, expectedRevision: revision.current }) })
+        if (!response.ok) {
+          const failure = await response.json() as { error?: string }
+          throw new Error(failure.error ?? `应用失败：HTTP ${response.status}`)
+        }
+      }
+      // 正式保存成功之后才删除本次草稿（技术契约 4）。
       if (draftId !== null) await removeDraftRequest(draftId).catch(() => undefined)
       onSaved({ id: written.id, hash: written.hash })
     } catch (caught) {
@@ -276,9 +318,9 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
       </header>
 
       <div className="dsh-widget-board__source-tabs" role="tablist">
-        {FILES.map((file) => {
+        {[...new Set([...FILES, ...Object.keys(files)])].map((file) => {
           const present = files[file] !== undefined
-          if (!present && file !== 'widget.json') return null
+          if (!present && file !== 'widget.json' && file !== 'main.js' && file !== 'samples.json') return null
           return (
             <button
               key={file}
@@ -287,15 +329,15 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
               className="dsh-widget-board__source-tab"
               data-dsh-widget-board-source-tab={file}
               aria-selected={active === file}
-              onClick={() => { setActive(file) }}
+              onClick={() => { if (!present) setFiles((current) => ({ ...current, [file]: file === 'samples.json' ? '{}' : '' })); setActive(file) }}
             >
-              {file}
+              {present ? file : `+ ${file}`}
             </button>
           )
         })}
       </div>
 
-      {model !== null && !writable
+      {model !== null
         ? (
           <p className="dsh-widget-board__source-note">
             {t('sourceSaveAs')}
@@ -303,11 +345,15 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
               className="dsh-widget-board__input dsh-widget-board__source-id"
               data-dsh-widget-board-source-id=""
               value={targetId}
+              disabled={updateAll}
               onChange={(event) => { setTargetId(event.target.value) }}
             />
           </p>
         )
         : null}
+
+      {writable ? <label className="dsh-widget-board__source-note"><input type="checkbox" data-dsh-widget-board-source-update-all="" checked={updateAll} onChange={(event) => { setUpdateAll(event.target.checked) }} />更新全部实例：{model?.usage?.map((entry) => `${entry.title}（${entry.count}）`).join('、') || '暂无实例'}</label> : null}
+      {drafts.length === 0 ? null : <div className="dsh-widget-board__source-note" data-dsh-widget-board-source-drafts="">{drafts.map((entry) => <span key={entry.draftId}><button type="button" className="dsh-widget-board__editor-ghost" onClick={() => { void restoreDraft(entry.draftId) }}>{entry.target.kind === 'widget' ? entry.target.widgetId : entry.target.instanceId} · {entry.updatedAt}</button><button type="button" className="dsh-widget-board__editor-ghost" onClick={() => { void removeDraftRequest(entry.draftId).then(() => { setDrafts((items) => items.filter((item) => item.draftId !== entry.draftId)) }, (caught: Error) => { setError(caught.message) }) }}>删除草稿</button></span>)}</div>}
 
       <div className="dsh-widget-board__source-editor" ref={hostRef} data-dsh-widget-board-source-editor={active} />
 

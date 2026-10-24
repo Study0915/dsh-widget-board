@@ -8,13 +8,16 @@
  * 预览端口只提供预览状态、尺寸、主题与错误：动作、能力调用与通知一律拒绝，预览里按下去不能产生
  * 正式副作用（C15）。会话十分钟过期，关闭时释放，同时最多四个。
  */
-import { randomBytes, randomUUID } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import type { PreviewSession, WidgetManifest } from '@dsh-widget-board/contracts'
 import type { DocumentAssets } from '../document'
 import { buildDocument, contentSecurityPolicy, freshNonce } from '../document'
 import { isRecord } from '../guards'
 import type { WidgetRecord } from '../library'
 import { Refusal } from '../refusal'
+import { contentHash, manifestProblem } from '../library'
+import { binaryInputs, checkWidgetFiles, normalizeWidgetPath } from '../widget-write/write'
+import { contentIssues, handshakeBytes } from '../content/validate'
 
 /** 一个预览会话活多久：十分钟（C6）。 */
 export const PREVIEW_TTL_MS = 10 * 60 * 1000
@@ -31,6 +34,7 @@ export const PREVIEW_STATE_LIMIT = 64 * 1024
 /** 预览会话的一份内容。 */
 export interface PreviewContent {
   files: Record<string, string>
+  binaryFiles?: Record<string, string>
   props: Record<string, unknown>
   data: unknown
   state: unknown
@@ -88,6 +92,7 @@ interface Session {
   content: PreviewContent
   record: WidgetRecord
   expiresAt: number
+  timer: ReturnType<typeof setTimeout>
 }
 
 /**
@@ -106,7 +111,7 @@ function previewId(): string {
  * @returns 组件记录。
  * @throws {Refusal} manifest 不合格或缺少必需的文件。
  */
-function recordOf(files: Record<string, string>): WidgetRecord {
+function recordOf(files: Record<string, string>, binaryFiles?: Record<string, string>): WidgetRecord {
   const manifestFile = files['widget.json']
   if (manifestFile === undefined) throw new Refusal(400, '预览的文件里没有 widget.json（D7）')
   let manifest: WidgetManifest
@@ -115,13 +120,18 @@ function recordOf(files: Record<string, string>): WidgetRecord {
   } catch (error) {
     throw new Refusal(400, `预览的 widget.json 不是合法 JSON：${(error as Error).message}`)
   }
-  if (typeof manifest !== 'object' || manifest === null || typeof manifest.id !== 'string' || manifest.id === '') {
-    throw new Refusal(400, '预览的 manifest 不合格')
-  }
+  const problem = manifestProblem(manifest)
+  if (problem !== undefined) throw new Refusal(400, problem)
+  checkWidgetFiles(Object.entries(files).map(([path, content]) => ({ path: normalizeWidgetPath(path), content })))
   const table = new Map<string, Buffer>()
   for (const [path, content] of Object.entries(files)) {
     table.set(path, Buffer.from(content, 'utf8'))
   }
+  for (const file of binaryInputs(binaryFiles)) {
+    if (table.has(file.path)) throw new Refusal(400, '资源路径重复')
+    table.set(file.path, file.content as Buffer)
+  }
+  checkWidgetFiles([...table].map(([path, content]) => ({ path, content })))
   for (const required of ['index.html', 'style.css']) {
     if (!table.has(required)) throw new Refusal(400, `预览缺少 ${required}（D7）`)
   }
@@ -129,7 +139,7 @@ function recordOf(files: Record<string, string>): WidgetRecord {
     manifest,
     source: 'user',
     dir: '',
-    hash: randomUUID().replaceAll('-', ''),
+    hash: contentHash(table),
     files: table,
   }
 }
@@ -177,7 +187,10 @@ export function createPreviews(): PreviewStore {
     async create(content, assets) {
       sweep()
       if (!isRecord(content.files)) throw new Refusal(400, '预览的文件要是一个对象')
-      const record = recordOf(content.files)
+      const record = recordOf(content.files, content.binaryFiles)
+      contentIssues('props', record.manifest.props, content.props)
+      if (content.data !== null) contentIssues('data', record.manifest.data, content.data)
+      if (content.state !== null) contentIssues('state', record.manifest.state, content.state)
       const total = Object.values(content.files).reduce((sum, text) => sum + Buffer.byteLength(text, 'utf8'), 0)
       if (total > PREVIEW_BYTES_LIMIT) {
         throw new Refusal(413, `预览的文件超过 ${String(PREVIEW_BYTES_LIMIT)} 字节`)
@@ -185,21 +198,27 @@ export function createPreviews(): PreviewStore {
       if (bytesOf(content.state) > PREVIEW_STATE_LIMIT) {
         throw new Refusal(413, `预览的状态超过 ${String(PREVIEW_STATE_LIMIT)} 字节`)
       }
-      if (bytesOf(content.props) + bytesOf(content.data) + bytesOf(content.state) > PREVIEW_STATE_LIMIT) {
+      if (handshakeBytes(record.manifest, content) + 8192 > PREVIEW_STATE_LIMIT) {
         throw new Refusal(413, `预览的内容超过 ${String(PREVIEW_STATE_LIMIT)} 字节`)
       }
       if (sessions.size >= PREVIEW_LIMIT) {
         throw new Refusal(429, `同时最多 ${String(PREVIEW_LIMIT)} 个预览；关掉一个再试`, { code: 'preview-limit' })
       }
       // 令牌、套件与运行时在这里读一次：预览用真实的资产，与正式卡片同一份（D3）。
-      void assets
+      try {
+        buildDocument(record, assets, freshNonce(), { lang: 'zh-CN' })
+      } catch (error) {
+        throw new Refusal(400, (error as Error).message)
+      }
       const id = previewId()
       const session: Session = {
         id,
         content,
         record,
         expiresAt: Date.now() + PREVIEW_TTL_MS,
+        timer: setTimeout(() => { sessions.delete(id) }, PREVIEW_TTL_MS),
       }
+      session.timer.unref()
       sessions.set(id, session)
       return { previewId: id, expiresAt: new Date(session.expiresAt).toISOString() }
     },
@@ -217,6 +236,8 @@ export function createPreviews(): PreviewStore {
       return { html, nonce }
     },
     release(id) {
+      const session = sessions.get(id)
+      if (session !== undefined) clearTimeout(session.timer)
       return sessions.delete(id)
     },
     size() {

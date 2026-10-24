@@ -2,7 +2,7 @@
  * 来源规则（技术契约 4、C4）。
  *
  * 内置与插件提供的组件是只读源：改它们时另存为一个新的用户组件 id，manifest 的 id 与目录名跟着
- * 一起改（C4）。已有用户组件默认就地改。
+ * 一起改（C4）。已有用户组件也默认另存。
  *
  * 这几条判定是纯的：面板画按钮、宿主写目录都按它，两处不会给出不同的答案。
  */
@@ -21,14 +21,14 @@ const ID_LIMIT = 39
  * @returns 就地改时是原 id；只读源另存时是一个新的用户组件 id。
  */
 export function suggestedIdOf(id: string, source: 'builtin' | 'user' | 'plugin'): string {
-  if (source === 'user') return id
+  void source
   // 目录名要与 manifest 的 id 一致（C4）；`user-` 前缀说明它是从别处复制来的。
   const slug = id
     .replace(/[^a-z0-9-]/g, '-')
     .replace(/^-+/, '')
     .replace(/-+$/, '')
     .slice(0, 24)
-  const candidate = `user-${slug === '' ? 'widget' : slug}`
+  const candidate = `user-${slug === '' ? 'widget' : slug}-${crypto.randomUUID().slice(0, 8)}`
   return candidate.slice(0, ID_LIMIT)
 }
 

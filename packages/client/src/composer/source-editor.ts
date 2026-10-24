@@ -13,13 +13,12 @@ import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLi
 import type { KeyBinding } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
-import { json } from '@codemirror/lang-json'
+import { json, jsonParseLinter } from '@codemirror/lang-json'
 import { html } from '@codemirror/lang-html'
 import { css } from '@codemirror/lang-css'
 import { javascript } from '@codemirror/lang-javascript'
-import { lintKeymap } from '@codemirror/lint'
+import { linter, lintKeymap } from '@codemirror/lint'
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete'
-import { oneDark } from '@codemirror/theme-one-dark'
 import type { EditorFileKind } from './editor-language'
 import { languageOf } from './editor-language'
 
@@ -33,7 +32,7 @@ export { languageOf }
  * @returns 扩展；纯文本时是空的。
  */
 function languageOfKind(kind: EditorFileKind): Extension[] {
-  if (kind === 'json') return [json()]
+  if (kind === 'json') return [json(), linter(jsonParseLinter())]
   if (kind === 'html') return [html()]
   if (kind === 'css') return [css()]
   if (kind === 'javascript') return [javascript()]
@@ -100,7 +99,13 @@ export function createSourceEditor(options: {
       options.onChange?.(update.state.doc.toString())
     }),
   ]
-  if (options.theme.dark) extensions.push(oneDark)
+  extensions.push(EditorView.theme({
+    '&': { color: 'var(--dsw-alias-label-primary)', backgroundColor: 'var(--dsw-alias-bg-layer-1)' },
+    '.cm-content': { caretColor: 'var(--dsw-alias-label-primary)' },
+    '.cm-gutters': { color: 'var(--dsw-alias-label-tertiary)', backgroundColor: 'transparent' },
+    '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent)' },
+    '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': { backgroundColor: 'var(--dsw-alias-bg-layer-2)' },
+  }, { dark: options.theme.dark }))
   const state = EditorState.create({ doc: options.value, extensions })
   const view = new EditorView({ state, parent: options.parent })
   return {

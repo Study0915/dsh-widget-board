@@ -198,6 +198,8 @@ export const librarySourcePath = (id: string): string => `${CLIENT_ROUTE}/librar
 
 /** 写下一个用户组件类型的地址，文档相对（技术契约 4）。 */
 export const libraryDefinePath = (): string => `${CLIENT_ROUTE}/library/define`
+/** 将一个经过版本核对的组件应用到指定实例。 */
+export const instanceSourcePath = (id: string): string => `${CLIENT_ROUTE}${INSTANCE_ROUTE}/${encodeURIComponent(id)}/source`
 
 /** 草稿的地址前缀，文档相对（技术契约 4）。 */
 export const DRAFTS_ROUTE = '/drafts'

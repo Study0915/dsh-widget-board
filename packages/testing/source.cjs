@@ -321,6 +321,10 @@ async function sourcePass(page, check) {
   if (discarding > 0) await page.locator('[data-dsh-widget-board-composer-discard]').click()
   const closed = await waitFor(async () => await page.locator('[data-dsh-widget-board-composer]').count() === 0, 10000)
   check('关掉源码面板之后创建器也收起来了', closed)
+  const { previewIsolationPass } = require('./source-preview.cjs')
+  await previewIsolationPass(page, check)
+  const { currentSourcePass } = require('./source-current.cjs')
+  await currentSourcePass(page, check)
 }
 
 module.exports = { sourcePass, openSource }

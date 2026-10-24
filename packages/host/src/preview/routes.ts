@@ -53,6 +53,7 @@ export function previewRoutes(previews: PreviewStore): Route[] {
         if (!isRecord(props)) throw new Refusal(400, '预览的 props 要是一个对象')
         const session = await previews.create({
           files: filesOf(body.files),
+          ...(body.binaryFiles === undefined ? {} : { binaryFiles: filesOf(body.binaryFiles) }),
           props,
           data: body.data ?? null,
           state: body.state ?? null,

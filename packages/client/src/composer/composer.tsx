@@ -106,7 +106,10 @@ export function CardComposer({
   /** 高级模式：改的是组件源码而不是这张卡的内容（C4）。 */
   const [sourceOpen, setSourceOpen] = useState(false)
   /** 源码模式下的预览：文件与内容交给它渲染。 */
-  const [previewOpen, setPreviewOpen] = useState(false)
+  const [sourceCloseRequest, setSourceCloseRequest] = useState(0)
+  const [previewAutoRun, setPreviewAutoRun] = useState(true)
+  const [sourcePane, setSourcePane] = useState<'editor' | 'preview'>('editor')
+  const [sourceBinary, setSourceBinary] = useState<Record<string, string>>({})
   /** 源码模式里当前的���件内容：预览面板按它开一个预览会话。 */
   const [sourceFiles, setSourceFiles] = useState<Record<string, string>>({})
   const dialogRef = useRef<HTMLDivElement | null>(null)
@@ -223,6 +226,7 @@ export function CardComposer({
 
   /** 关掉弹窗：填过内容时先确认（C06 的一半——输入不因为一次误点丢掉）。 */
   const requestClose = (): void => {
+    if (sourceOpen) { setSourceCloseRequest((value) => value + 1); return }
     const blank = Object.keys(props).length === 0 && (data === null || data === undefined) && (state === null || state === undefined)
     if (blank || confirmClose) {
       onClose()
@@ -276,7 +280,8 @@ export function CardComposer({
           </button>
         </header>
 
-        <div className="dsh-widget-board__composer-body">
+        {sourceOpen ? <div className="dsh-widget-board__source-panes">{(['editor', 'preview'] as const).map((pane) => <button key={pane} type="button" className="dsh-widget-board__editor-ghost" aria-pressed={sourcePane === pane} onClick={() => { setSourcePane(pane) }}>{pane === 'editor' ? '源码' : '预览'}</button>)}</div> : null}
+        <div className="dsh-widget-board__composer-body" data-dsh-widget-board-source-pane={sourceOpen ? sourcePane : undefined}>
           <div className="dsh-widget-board__composer-form">
             <div className="dsh-widget-board__composer-templates" role="group" aria-label={t('templates')}>
               {TEMPLATES.map((entry) => {
@@ -288,7 +293,7 @@ export function CardComposer({
                     className="dsh-widget-board__composer-template"
                     data-dsh-widget-board-template={entry.key}
                     aria-pressed={templateKey === entry.key}
-                    disabled={unavailable || saving}
+                    disabled={unavailable || saving || sourceOpen}
                     title={unavailable ? t('templateMissing') : isChinese() ? entry.hint.zh : entry.hint.en}
                     onClick={() => { pickTemplate(entry.key) }}
                   >
@@ -314,7 +319,7 @@ export function CardComposer({
                     data-dsh-widget-board-mode="form"
                     aria-pressed={!sourceOpen}
                     disabled={saving}
-                    onClick={() => { setSourceOpen(false) }}
+                    onClick={() => { setSourceCloseRequest((value) => value + 1) }}
                   >
                     {t('formBasic')}
                   </button>
@@ -334,11 +339,15 @@ export function CardComposer({
             {sourceOpen && widgetId !== null
               ? (
                 <SourceEditorPanel
+                  key={widgetId}
                   widgetId={widgetId}
                   theme={theme}
-                  onSaved={() => { setSourceOpen(false) }}
+                  onSaved={(result) => { setTemplateKey('advanced'); setAdvanced(result.id); setSourceOpen(false) }}
                   onFilesChanged={setSourceFiles}
-                  onClose={() => { setSourceOpen(false) }}
+                  onBinaryChanged={setSourceBinary}
+                  closeRequest={sourceCloseRequest}
+                  onRestore={() => { setPreviewAutoRun(false) }}
+                  onClose={() => { setSourceOpen(false); setSourceCloseRequest(0) }}
                 />
               )
               : null}
@@ -427,6 +436,8 @@ export function CardComposer({
               ? (
                 <PreviewPanel
                   files={sourceFiles}
+                  binaryFiles={sourceBinary}
+                  autoRun={previewAutoRun}
                   props={props}
                   data={data}
                   state={state}
@@ -435,7 +446,7 @@ export function CardComposer({
                 />
               )
               : null}
-            {previewWidget === undefined || widgetId === null
+            {sourceOpen ? null : previewWidget === undefined || widgetId === null
               ? <p className="dsh-widget-board__editor-empty">{t('formPreviewHint')}</p>
               : (
                 <div className="dsh-widget-board__composer-frame" data-size={previewFamily}>
@@ -484,7 +495,7 @@ export function CardComposer({
                 type="button"
                 className="dsh-widget-board__editor-primary"
                 data-dsh-widget-board-composer-submit=""
-                disabled={!ready || saving}
+                disabled={!ready || saving || sourceOpen}
                 onClick={() => { void submit() }}
               >
                 {saving ? t('formSubmitting') : t('formSubmit')}

@@ -28,6 +28,8 @@ import {
   saveCardContent,
 } from '../snapshot'
 import { SchemaForm, formPathOf } from './fields'
+import { SourceEditorPanel } from './source-panel'
+import { PreviewPanel } from './preview-panel'
 
 /** 内容编辑器要画的东西。 */
 export interface ContentEditorProps {
@@ -109,6 +111,18 @@ export function ContentEditor({
   const [loadError, setLoadError] = useState<string | null>(null)
   const [confirmClose, setConfirmClose] = useState(false)
   const [savedOnce, setSavedOnce] = useState(false)
+  const [sourceOpen, setSourceOpen] = useState(false)
+  const [sourceFiles, setSourceFiles] = useState<Record<string, string>>({})
+  const [sourceBinary, setSourceBinary] = useState<Record<string, string>>({})
+  const [sourceCloseRequest, setSourceCloseRequest] = useState(0)
+  const [previewAutoRun, setPreviewAutoRun] = useState(true)
+  const [sourcePane, setSourcePane] = useState<'editor' | 'preview'>('editor')
+  const currentSize = useMemo(() => {
+    const frame = anchor?.querySelector<HTMLIFrameElement>(`[data-instance="${CSS.escape(instanceId)}"] iframe.dsh-widget-board__frame`)
+    if (frame === null || frame === undefined) return undefined
+    const box = frame.getBoundingClientRect()
+    return { width: box.width, height: box.height }
+  }, [anchor, instanceId])
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const closeRef = useRef<HTMLButtonElement | null>(null)
 
@@ -217,6 +231,7 @@ export function ContentEditor({
 
   /** 关掉弹窗：有未保存内容时先确认。 */
   const requestClose = (): void => {
+    if (sourceOpen) { setSourceCloseRequest((value) => value + 1); return }
     if (!dirty && error === null) {
       onClose()
       return
@@ -279,8 +294,11 @@ export function ContentEditor({
           </button>
         </header>
 
-        <div className="dsh-widget-board__composer-body">
+        {sourceOpen ? <div className="dsh-widget-board__source-panes">{(['editor', 'preview'] as const).map((pane) => <button key={pane} type="button" className="dsh-widget-board__editor-ghost" aria-pressed={sourcePane === pane} onClick={() => { setSourcePane(pane) }}>{pane === 'editor' ? '源码' : '预览'}</button>)}</div> : null}
+        <div className="dsh-widget-board__composer-body" data-dsh-widget-board-source-pane={sourceOpen ? sourcePane : undefined}>
           <div className="dsh-widget-board__composer-form">
+            {model === null ? null : <button type="button" className="dsh-widget-board__editor-ghost" data-dsh-widget-board-content-source="" onClick={() => { setSourceOpen(true) }}>{t('sourceTitle')}</button>}
+            {sourceOpen && model !== null ? <SourceEditorPanel widgetId={model.widget.id} instanceId={instanceId} theme={theme} onFilesChanged={setSourceFiles} onBinaryChanged={setSourceBinary} onRestore={() => { setPreviewAutoRun(false) }} closeRequest={sourceCloseRequest} onClose={() => { setSourceOpen(false); setSourceCloseRequest(0) }} onSaved={() => { setSourceOpen(false); load(true); onSaved() }} /> : null}
             {loadError === null
               ? null
               : (
@@ -293,7 +311,7 @@ export function ContentEditor({
               )}
             {model === null
               ? <p className="dsh-widget-board__editor-empty">{t('editorLoading')}</p>
-              : sections.map((section) => {
+              : sourceOpen ? null : sections.map((section) => {
                 const schema = section.key === 'props'
                   ? model.widget.propsSchema
                   : section.key === 'data' ? model.widget.dataSchema : model.widget.stateSchema
@@ -351,7 +369,7 @@ export function ContentEditor({
               <span>{t('formPreview')}</span>
               {savedOnce ? <span className="dsh-widget-board__editor-ok">{t('saved')}</span> : null}
             </div>
-            {preview === undefined || model === null
+            {sourceOpen ? <PreviewPanel files={sourceFiles} binaryFiles={sourceBinary} autoRun={previewAutoRun} currentSize={currentSize} props={props} data={data} state={state} theme={theme} frames={frames} /> : preview === undefined || model === null
               ? <p className="dsh-widget-board__editor-empty">{t('formPreviewHint')}</p>
               : (
                 <div className="dsh-widget-board__composer-frame">
@@ -400,7 +418,7 @@ export function ContentEditor({
                 type="button"
                 className="dsh-widget-board__editor-primary"
                 data-dsh-widget-board-content-save=""
-                disabled={saving || model === null || !dirty}
+                disabled={saving || model === null || !dirty || sourceOpen}
                 onClick={() => { void save() }}
               >
                 {saving ? t('formSaving') : t('save')}

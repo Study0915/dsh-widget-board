@@ -31,6 +31,8 @@ Every widget runs in its own sandboxed iframe: a strict CSP, no network and no c
 |---|---|
 | Plus menu | Add, tidy, refresh; Add opens the floating library |
 | Card gear | Change the widget's props, fill in credentials, review and grant data sources and permissions |
+| Edit widget source | Load CodeMirror on demand; save a separate user type and apply it to the current card; updating all instances requires an explicit choice and a version check |
+| Source drafts and preview | Save, restore and delete drafts; preview uses the real sandbox without performing formal actions, capability calls or notifications |
 | Session tools | The agent lists, writes, places widgets and pushes data; `widget_show` draws one in the answer |
 | `widgetBoard` service | Other plugins register widgets, data sources, actions and host capabilities |
 

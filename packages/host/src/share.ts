@@ -64,8 +64,9 @@ async function install(
   const manifest = JSON.parse(Buffer.from(manifestFile.content).toString('utf8')) as unknown
   const rest = files
     .filter((file) => file.path !== 'widget.json')
-    .map((file) => ({ path: file.path, content: Buffer.from(file.content).toString('utf8') }))
+    .map((file) => ({ path: file.path, content: Buffer.from(file.content) }))
   await writeWidgetType({
+    assets: context.live.assets,
     roots: context.roots,
     records: () => context.records,
     request: {
