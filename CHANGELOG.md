@@ -11,8 +11,10 @@
 <h3 id="cn-unreleased">新增功能</h3>
 
 - 新增内置组件「今日宜休」：按卡片设置里的 GitHub 令牌认账号，列出这个账号名下还开着的 issue，带仓库、编号、标签与开了几天；点一行就在新标签页里打开那一条。组件自己不能导航，跳转交给宿主页面完成。
+- 看板上可以直接创建与编辑卡片内容：下方菜单与组件库头部多了「创建卡片」，选一个模板（文本笔记、待办清单、常用链接、日期倒计时，或从组件库里挑任意组件）之后按组件自己声明的 schema 填内容，右边是真实的渲染预览，一次提交才建出实例。表单能编辑字符串、数字、布尔、枚举、日期、时刻、多层的对象与数组；数组项可以加、删、上下移动，表单不支持的写法给一个显式的 JSON 入口并说明原因。卡片设置里多了「编辑内容」，按读到的修订号保存，冲突时保留输入并给出重新读取与另存为新卡片两条路。宿主新增 `POST /boards/<id>/compose`、`GET|POST /instance/<id>/content` 与 `GET /library/<id>/form` 三条人工内容路由，请求体 128KiB，props、data 与 state 分别按 schema 校验，单卡状态、整板状态与握手消息的额度各报一次。
 - 新增内置组件「运行成本」：左边是宿主进程的常驻内存，右边是一块机器体检面板——堆与外部内存、系统内存、CPU 核数与负载、看板数据所在卷的磁盘余量、系统版本，外加卡片数、状态序列化总量、文档体积与组件库规模，最近 60 次采样画成折线。面板上的「再测一次」由宿主经同一条读取路径重读一次。数据源 `widget-board:system.metrics` 只读宿主自己的内存、机器读数与工作区，没有观众时不采样；卡片离开视口或页面隐藏时停止绘制与状态写入。矮盒子里保留四行带条形图的读数，堆、系统内存、CPU 与磁盘始终看得到。
 - 组件可以把链接交给宿主打开：`widget.open(url)` 发一条桥消息，由宿主页面在新标签页里开出这一页，协议只限 http 与 https。沙箱仍然不给导航与弹窗，组件拿到的只是「请宿主开一个网页」这一件事；会话里内联显示的卡片同样可用。
+- 新增内置组件「日期倒计时」：名称、日期、时刻、全天、时区与一行备注，读成距目标还有几天几时几分，到点之后改成已经过去的说法。目标时刻按指定时区的墙上时间换算，换算只借 `Intl.DateTimeFormat`，不引时区表；时区名读不出来时退回本地时区并在卡片上说明。分钟精度，每 15 秒重算一次，暂停时停掉计时器。
 
 ### 体验优化
 
@@ -29,8 +31,10 @@
 <h3 id="en-unreleased">New Features</h3>
 
 - New built-in widget "Rest today": uses the GitHub token from the card settings to find the account and lists the open issues on its repositories, with repository, number, labels and age; clicking a row opens it in a new tab. Widgets cannot navigate themselves, so the host page opens the link.
+- Cards can be created and edited on the board: the dock menu and the library header gain "Create card", which picks a template (text note, to-do list, bookmarks, date countdown, or any widget from the library) and fills in what the widget's own schema declares, with a real rendered preview; the instance is written in one submit. The form edits strings, numbers, booleans, enums, dates, times, nested objects and arrays; array items can be added, removed and reordered, and schemas the form cannot render get an explicit JSON editor with the reason. The card settings gain "Edit content", which saves against the revision it read, keeps the input on conflict, and offers reload or save-as-new-card. The host gains three human content routes — `POST /boards/<id>/compose`, `GET|POST /instance/<id>/content` and `GET /library/<id>/form` — with a 128KiB body limit, per-schema checks for props, data and state, and separate reports for the single-card, whole-board and handshake budgets.
 - New built-in widget "Running cost": the host process's resident memory on the left and a machine check panel on the right — heap and external memory, system memory, CPU cores and load, free space on the volume holding board data, and the OS version, plus card count, serialized state size, document weight and library size, with the last 60 samples drawn as a sparkline. The panel's "Measure again" button asks the host to reread through the same path. The `widget-board:system.metrics` source reads only the host's own memory, machine readings and workspace; it samples nothing without an audience and stops drawing and writing state when the card leaves the viewport or the page is hidden. Short boxes keep four rows with bars, so heap, system memory, CPU and disk stay visible.
 - Widgets can hand a link to the host: `widget.open(url)` sends one bridge message and the host page opens it in a new tab, limited to http and https. The sandbox still grants no navigation or popups — a widget only gets to ask the host to open a page, and inline cards in a session can do it too.
+- New built-in widget "Countdown": name, date, time, all-day, time zone and a line of note, read as days, hours and minutes to the target and as how long ago it was once it passes. The target is converted from wall time in the chosen zone using `Intl.DateTimeFormat` only, with no time-zone table; an unknown zone name falls back to local time and says so on the card. Minute precision, recomputed every 15 seconds, with the timer stopped while paused.
 
 ### Improvements
 
