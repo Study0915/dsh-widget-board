@@ -33,6 +33,8 @@ export interface LibraryPanelProps {
   onClose: () => void
   /** 导入一个组件包之后重读组件库（D8）。 */
   onImported?: () => void
+  /** 打开创建卡片（C01、C02）：模板与表单在插件自己的弹窗里，不用离开这一页。 */
+  onCreate?: () => void
 }
 
 /**
@@ -69,6 +71,7 @@ export function LibraryPanel({
   onBeginDrag,
   onClose,
   onImported,
+  onCreate,
 }: LibraryPanelProps): ReactNode {
   /** 导入的失败原因：画在头部，不把整个浮窗换成错误页。 */
   const [importError, setImportError] = useState<string | null>(null)
@@ -82,6 +85,18 @@ export function LibraryPanel({
           {importError === null ? null : <p className="dsh-widget-board__library-error" role="status">{importError}</p>}
         </div>
         <div className="dsh-widget-board__library-actions">
+          {onCreate === undefined
+            ? null
+            : (
+              <button
+                type="button"
+                className="dsh-widget-board__library-create"
+                data-dsh-widget-board-library-create=""
+                onClick={onCreate}
+              >
+                {t('create')}
+              </button>
+            )}
           <label className="dsh-widget-board__library-import">
             {t('import')}
             <input

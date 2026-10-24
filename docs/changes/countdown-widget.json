@@ -1,0 +1,8 @@
+{
+  "group": "new",
+  "order": 2,
+  "at": "2026-10-24",
+  "external": true,
+  "zh": "新增内置组件「日期倒计时」：名称、日期、时刻、全天、时区与一行备注，读成距目标还有几天几时几分，到点之后改成已经过去的说法。目标时刻按指定时区的墙上时间换算，换算只借 `Intl.DateTimeFormat`，不引时区表；时区名读不出来时退回本地时区并在卡片上说明。分钟精度，每 15 秒重算一次，暂停时停掉计时器。",
+  "en": "New built-in widget \"Countdown\": name, date, time, all-day, time zone and a line of note, read as days, hours and minutes to the target and as how long ago it was once it passes. The target is converted from wall time in the chosen zone using `Intl.DateTimeFormat` only, with no time-zone table; an unknown zone name falls back to local time and says so on the card. Minute precision, recomputed every 15 seconds, with the timer stopped while paused."
+}
