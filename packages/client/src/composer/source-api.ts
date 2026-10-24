@@ -119,11 +119,11 @@ export async function fetchDrafts(): Promise<WidgetDraftSummary[]> {
 /**
  * 写一份草稿（技术契约 4）。
  *
- * @param draft - 草稿内容。
+ * @param draft - 草稿内容；`draftId` 省略时新造一份。
  * @returns 存下来的那一份。
  * @throws {Error} 请求失败；草稿已满或含凭据值时带上宿主给的原因。
  */
-export async function saveDraft(draft: Omit<WidgetDraft, 'updatedAt'> & { updatedAt?: string }): Promise<WidgetDraft> {
+export async function saveDraft(draft: Omit<WidgetDraft, 'draftId' | 'updatedAt'> & { draftId?: string, updatedAt?: string }): Promise<WidgetDraft> {
   const response = await fetch(draftsPath(), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

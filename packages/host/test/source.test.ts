@@ -250,6 +250,31 @@ describe('读一个组件的源码', () => {
     expect(response.status).toBe(404)
     expect(response.body).toMatch(/nope/)
   })
+
+  it('凭据值不进源码响应：只有名字与用途', async () => {
+    // manifest 声明凭据的名字与用途，值由宿主的凭据服务保存（D27）。这里确认响应里
+    // 只有声明，没有值：把一个看起来像密钥的字符串放进组件目录，响应里不该有它。
+    const test = await harness()
+    const dir = join(test.userDir, 'withsecret')
+    await mkdir(dir, { recursive: true })
+    const manifest = {
+      id: 'withsecret',
+      title: { zh: '带凭据', en: 'With secret' },
+      version: '0.1.0',
+      sizes: ['s'],
+      credentials: [{ ref: 'MY_API_KEY', label: { zh: '密钥', en: 'Key' } }],
+    }
+    await writeFile(join(dir, 'widget.json'), JSON.stringify(manifest))
+    await writeFile(join(dir, 'index.html'), '<p>hi</p>')
+    await writeFile(join(dir, 'style.css'), 'p{}')
+    await test.context.refresh()
+    const response = await test.send('GET', '/library/withsecret/source')
+    expect(response.status).toBe(200)
+    const model = JSON.parse(response.body) as { manifest: string }
+    // 声明的名字在，值的形状不在。
+    expect(model.manifest).toContain('MY_API_KEY')
+    expect(model.manifest).not.toMatch(/-----BEGIN/)
+  })
 })
 
 describe('写一个用户组件类型', () => {

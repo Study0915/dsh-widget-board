@@ -73,6 +73,30 @@ async function sourceModel(page) {
 }
 
 /**
+ * 请宿主写一个组件类型：并发、只读来源与形状错误的判定都从这里走。
+ *
+ * @param {object} page - 宿主页面。
+ * @param {string} id - 组件 id。
+ * @param {object} extra - 额外带的字段，例如 expectedHash。
+ * @returns 状态码与答复里的字段。
+ */
+async function defineOn(page, id, extra = {}) {
+  return await page.evaluate(async ([target, rest]) => {
+    const response = await fetch('api/widget-board/library/define', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: target,
+        manifest: { id: target, title: { zh: '别的', en: 'Other' }, version: '0.1.0', sizes: ['s'] },
+        files: { 'index.html': '<p>改</p>', 'style.css': 'p{}' },
+        ...rest,
+      }),
+    })
+    return { status: response.status, body: await response.json() }
+  }, [id, extra])
+}
+
+/**
  * 高级源码、草稿与真实预览（技术契约 4—5）。
  *
  * @param page - 宿主页面，看板已经打开。
@@ -162,6 +186,57 @@ async function sourcePass(page, check) {
   check('预览用同一份 CSP', preview.csp.includes("default-src 'none'") && !preview.csp.includes('same-origin'), preview.csp.slice(0, 60))
   check('预览关掉之后就没有了', preview.released === 200 && preview.afterStatus === 404, `${String(preview.released)} / ${String(preview.afterStatus)}`)
 
+  // C15：预览里的动作、调用与通知不产生正式副作用。这里让预览里的组件真的去发一次动作，
+  // 看它有没有进到正式的动作路由里。
+  const sideEffect = await page.evaluate(async () => {
+    // 一份会发动作的组件：动作名是宿主真的注册过的一个。
+    const files = {
+      'widget.json': JSON.stringify({
+        id: 'actor',
+        title: { zh: '会动手的', en: 'Actor' },
+        version: '0.1.0',
+        sizes: ['s'],
+        actions: [{ id: 'system-metrics' }],
+      }),
+      'index.html': '<button id="go">动手</button>',
+      'style.css': 'button{}',
+      'main.js': 'document.getElementById("go").addEventListener("click", () => { window.widget.action("system-metrics"); window.widget.notify({ title: "预览里发来的" }) })',
+    }
+    const created = await fetch('api/widget-board/preview', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ files, props: {} }),
+    })
+    if (!created.ok) return { status: created.status }
+    const session = await created.json()
+    const frame = document.createElement('iframe')
+    frame.sandbox = 'allow-scripts'
+    frame.src = `api/widget-board/preview/${session.previewId}/document?lang=zh-CN`
+    document.body.append(frame)
+    await new Promise((resolve) => { frame.addEventListener('load', resolve, { once: true }) })
+    // 预览的 iframe 没有 same-origin：父页面读不到它的文档，也点不到它的按钮。
+    // 内容只能从它自己报出来——这正是隔离的一部分。
+    const reachable = frame.contentDocument !== null
+    let sameOrigin = false
+    try {
+      sameOrigin = frame.contentWindow?.location?.href !== undefined && frame.contentWindow.location.href !== 'about:blank'
+    } catch {
+      sameOrigin = false
+    }
+    await fetch(`api/widget-board/preview/${session.previewId}`, { method: 'DELETE' })
+    frame.remove()
+    // 正式的动作路由拿预览的 id 去调：宿主找不到这张卡。
+    const routed = await fetch('api/widget-board/instance/preview-not-a-card/action', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: 'system-metrics' }),
+    })
+    return { status: created.status, reachable, sameOrigin, routed: routed.status }
+  })
+  check('预览会话开得起来', sideEffect.status === 201, String(sideEffect.status))
+  check('预览的 iframe 与父页面不同源，父页面读不到它的内容', sideEffect.reachable === false && sideEffect.sameOrigin === false, JSON.stringify(sideEffect))
+  check('预览没有真实的实例 id，动作没有去处', sideEffect.routed === 404, String(sideEffect.routed))
+
   // C13：草稿存下来、读得出来、删得掉。
   const draft = await page.evaluate(async () => {
     const saved = await fetch('api/widget-board/drafts', {
@@ -187,58 +262,61 @@ async function sourcePass(page, check) {
   check('草稿删得掉', draft.removed === 200 && draft.afterStatus === 404, `${String(draft.removed)} / ${String(draft.afterStatus)}`)
 
   // C10：expectedHash 对不上时回 409，旧目录原样保留。这里用刚另存出来的那个用户组件。
-  const conflict = await page.evaluate(async (id) => {
-    const response = await fetch('api/widget-board/library/define', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        id,
-        manifest: { id, title: { zh: '别的', en: 'Other' }, version: '0.1.0', sizes: ['s'] },
-        files: { 'index.html': '<p>改</p>', 'style.css': 'p{}' },
-        expectedHash: 'c'.repeat(64),
-      }),
-    })
-    return { status: response.status, body: await response.json() }
-  }, suggested)
+  const conflict = await defineOn(page, suggested, { expectedHash: 'c'.repeat(64) })
   check('expectedHash 对不上时回 409', conflict.status === 409 && conflict.body.code === 'stale-hash', `${String(conflict.status)} ${String(conflict.body.code)}`)
 
   // 不带 expectedHash 的更新也回 409：并发核对不能被绕过去。
-  const noHash = await page.evaluate(async (id) => {
-    const response = await fetch('api/widget-board/library/define', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        id,
-        manifest: { id, title: { zh: '别的', en: 'Other' }, version: '0.1.0', sizes: ['s'] },
-        files: { 'index.html': '<p>改</p>', 'style.css': 'p{}' },
-      }),
-    })
-    return { status: response.status, body: await response.json() }
-  }, suggested)
+  const noHash = await defineOn(page, suggested)
   check('更新不带 expectedHash 时回 409', noHash.status === 409, `${String(noHash.status)} ${String(noHash.body.code)}`)
 
   // C08：只读来源的更新被拒。
-  const readonly = await page.evaluate(async () => {
-    const response = await fetch('api/widget-board/library/define', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        id: 'markdown',
-        manifest: { id: 'markdown', title: { zh: '别的', en: 'Other' }, version: '0.1.0', sizes: ['s'] },
-        files: { 'index.html': '<p>改</p>', 'style.css': 'p{}' },
-      }),
-    })
-    return { status: response.status, body: await response.json() }
-  })
+  const readonly = await defineOn(page, 'markdown')
   check('只读来源的更新被拒', readonly.status === 403 && readonly.body.code === 'readonly-source', `${String(readonly.status)} ${String(readonly.body.code)}`)
 
-  // 把创建器收起来：它留在那里会挡住下方的菜单，后面的场景就点不动了。
-  // 源码面板的关闭按钮只回到表单模式；写成功之后它自己就收起来了。
-  const sourcePanel = page.locator('[data-dsh-widget-board-source-close]')
-  if (await sourcePanel.count() > 0) await sourcePanel.click()
+  // C13：面板里存草稿、恢复草稿，以及关闭时的三个选择。
+  await openSource(page, 'markdown')
+  await waitForEditor(page)
+  const draftEditor = page.locator('[data-dsh-widget-board-source-editor] .cm-content')
+  await draftEditor.click()
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type('\n<p>草稿里的一行</p>')
+  await page.locator('[data-dsh-widget-board-source-draft-save]').click()
+  const savedDraft = await waitFor(async () => await page.locator('.dsh-widget-board__editor-ok').count() > 0, 10000)
+  check('源码面板能存草稿', savedDraft)
+
+  // 改回原样，恢复草稿时那一份又回来了。
+  await page.keyboard.press('Control+z')
+  await page.keyboard.press('Control+z')
+  await page.keyboard.press('Control+z')
+  await page.keyboard.press('Control+z')
+  await page.locator('[data-dsh-widget-board-source-draft-restore]').click()
+  const restored = await waitFor(async () => await page.locator('[data-dsh-widget-board-source-editor] .cm-content').textContent().then((text) => String(text).includes('草稿里的一行')), 10000)
+  check('草稿能恢复到编辑器里', restored)
+
+  // 关闭时先问一句：存草稿、放弃还是继续编辑。
+  await page.keyboard.press('Control+End')
+  await page.keyboard.type('\n<p>又改了一行</p>')
+  await page.locator('[data-dsh-widget-board-source-close]').click()
+  const asked = await waitFor(async () => await page.locator('[data-dsh-widget-board-source-close-choice]').count() === 1, 10000)
+  check('关掉脏编辑器时先问一句', asked)
+  const choices = await page.locator('[data-dsh-widget-board-source-close-choice] button').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-dsh-widget-board-source-keep') !== null ? 'keep' : node.getAttribute('data-dsh-widget-board-source-draft') !== null ? 'draft' : node.getAttribute('data-dsh-widget-board-source-discard') !== null ? 'discard' : 'other'))
+  check('三个选择都在：继续、存草稿、放弃', choices.includes('keep') && choices.includes('draft') && choices.includes('discard'), choices.join(','))
+
+  // 继续编辑：面板还在。
+  await page.locator('[data-dsh-widget-board-source-keep]').click()
+  const kept = await waitFor(async () => await page.locator('[data-dsh-widget-board-source-close-choice]').count() === 0, 10000)
+  check('继续编辑之后面板还在', kept)
+
+  // 放弃：面板收起来。
+  await page.locator('[data-dsh-widget-board-source-close]').click()
+  await page.waitForSelector('[data-dsh-widget-board-source-close-choice]', { timeout: 10000 })
+  await page.locator('[data-dsh-widget-board-source-discard]').click()
+  const discarded = await waitFor(async () => await page.locator('[data-dsh-widget-board-source]').count() === 0, 10000)
+  check('放弃之后面板收起来了', discarded)
+
+  // 把创建器也收起来：它留在那里会挡住下方的菜单，后面的场景就点不动了。
   await page.waitForSelector('[data-dsh-widget-board-composer-close]', { timeout: 10000 })
   await page.locator('[data-dsh-widget-board-composer-close]').click()
-  // 有未保存的内容时它会先问一次：放弃修改。
   const discarding = await page.locator('[data-dsh-widget-board-composer-discard]').count()
   if (discarding > 0) await page.locator('[data-dsh-widget-board-composer-discard]').click()
   const closed = await waitFor(async () => await page.locator('[data-dsh-widget-board-composer]').count() === 0, 10000)

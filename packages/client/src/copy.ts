@@ -214,6 +214,10 @@ const COPY = {
   draftRestore: { zh: '恢复草稿', en: 'Restore draft' },
   draftDiscard: { zh: '删掉草稿', en: 'Delete draft' },
   draftFull: { zh: '草稿已经满了，先删掉一份', en: 'The drafts are full; delete one first' },
+  draftUnsaved: {
+    zh: '这份源码还没写下去。可以存成草稿、放弃，或者继续编辑。',
+    en: 'These changes are not written yet. Save them as a draft, discard them, or keep editing.',
+  },
   preview: { zh: '预览', en: 'Preview' },
   previewRun: { zh: '运行', en: 'Run' },
   previewRunning: { zh: '正在重建…', en: 'Rebuilding…' },
