@@ -20,24 +20,11 @@ import { javascript } from '@codemirror/lang-javascript'
 import { lintKeymap } from '@codemirror/lint'
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete'
 import { oneDark } from '@codemirror/theme-one-dark'
+import type { EditorFileKind } from './editor-language'
+import { languageOf } from './editor-language'
 
-/** 编辑器要画的那些文件。 */
-export type EditorFileKind = 'json' | 'html' | 'css' | 'javascript' | 'text'
-
-/**
- * 按文件名给出语言。
- *
- * @param path - 组件目录里的相对路径。
- * @returns 语言。
- */
-export function languageOf(path: string): EditorFileKind {
-  const lower = path.toLowerCase()
-  if (lower.endsWith('.json')) return 'json'
-  if (lower.endsWith('.html')) return 'html'
-  if (lower.endsWith('.css')) return 'css'
-  if (lower.endsWith('.js') || lower.endsWith('.mjs')) return 'javascript'
-  return 'text'
-}
+export type { EditorFileKind }
+export { languageOf }
 
 /**
  * 一个文件对应的语言扩展。
