@@ -272,4 +272,4 @@ async function contentPass(page, check) {
   await removeCards(page, createdIds)
 }
 
-module.exports = { composerPass, contentPass, libraryEntryPass, openComposerFromMenu }
+module.exports = { composerPass, contentPass, libraryEntryPass, openComposerFromMenu, pickTemplate }

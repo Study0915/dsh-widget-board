@@ -71,7 +71,7 @@ export function defineTool(context: ToolContext): WidgetToolSpec {
       }
       const written = await writeWidgetType({
         roots: context.route.roots,
-        records: context.route.records,
+        records: () => context.route.records,
         request: { id: wanted.id, manifest: wanted.manifest, files, ...(expectedHash === undefined ? {} : { expectedHash }) },
         reload: context.reload,
       })

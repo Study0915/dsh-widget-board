@@ -67,7 +67,7 @@ async function install(
     .map((file) => ({ path: file.path, content: Buffer.from(file.content).toString('utf8') }))
   await writeWidgetType({
     roots: context.roots,
-    records: context.records,
+    records: () => context.records,
     request: {
       id,
       manifest,

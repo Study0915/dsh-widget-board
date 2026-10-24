@@ -156,8 +156,11 @@ function filesOf(manifest: WidgetManifest, files: readonly WidgetFileInput[]): {
  * 只读来源（内置与插件提供）不能就地改：调用方先把它另存为一个新的用户组件 id，再走这里。更新
  * 已有用户组件时要带 `expectedHash`：对不上说明别人改过，返回 409 而不是覆盖（C4）。
  *
+ * `records` 是取当前组件库的方法而不是它自己：重读组件库会换掉整张表（D17），拿着旧的那一份
+ * 会在写完之后以为组件没进库。
+ *
  * @param options.roots - 组件来源表。
- * @param options.records - 当前组件库；用于核对来源与当前哈希。
+ * @param options.records - 取当前组件库。
  * @param options.request - 这次写入的内容。
  * @param options.reload - 写完之后重读组件库。
  * @returns 写下的组件。
@@ -165,11 +168,11 @@ function filesOf(manifest: WidgetManifest, files: readonly WidgetFileInput[]): {
  */
 export async function writeWidgetType(options: {
   roots: readonly WidgetRoot[]
-  records: Map<string, WidgetRecord>
+  records: () => Map<string, WidgetRecord>
   request: WidgetWriteRequest
   reload: () => Promise<void>
 }): Promise<WidgetWriteResult> {
-  const { roots, records, request, reload } = options
+  const { roots, request, reload } = options
   if (!WIDGET_ID_PATTERN.test(request.id)) {
     throw new Refusal(400, `组件 id 要匹配 ${WIDGET_ID_PATTERN.source}：${request.id}`)
   }
@@ -184,7 +187,7 @@ export async function writeWidgetType(options: {
   const all = filesOf(manifest, files)
 
   const root = userRootOf(roots)
-  const existing = records.get(request.id)
+  const existing = options.records().get(request.id)
   if (existing !== undefined && existing.source !== 'user') {
     // 只读源：内置与插件提供的组件不落在用户目录里，导入与编辑都另存为一个新的 id（技术契约 4）。
     throw new Refusal(403, `${request.id} 是${existing.source === 'builtin' ? '内置' : '插件提供'}的组件，不能就地改；另存为一个新的用户组件`, {
@@ -238,7 +241,7 @@ export async function writeWidgetType(options: {
     await rm(retired, { recursive: true, force: true })
   }
   await reload()
-  const record = records.get(request.id)
+  const record = options.records().get(request.id)
   if (record === undefined) {
     throw new Refusal(500, `写完了，但组件库重读之后没有 ${request.id}；检查目录里的文件`)
   }
