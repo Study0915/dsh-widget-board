@@ -57,8 +57,12 @@ function rootFontSize(): number {
 /** 卡片移动与设置弹窗读令牌（D10）；外壳没有 `--w-*`，这里把令牌的字面值写在这一页的根上。 */
 const MOTION = (tokens as { motion: Record<string, string> }).motion
 const TYPE = (tokens as { type: Record<string, string> }).type
+const SPACE = (tokens as { space: Record<string, string> }).space
 const RADIUS = (tokens as { radius: { card: string } }).radius.card
 const SHELL_STYLE = {
+  '--w-space-sm': SPACE.sm,
+  '--w-space-lg': SPACE.lg,
+  '--w-space-xl': SPACE.xl,
   '--w-motion-fast': MOTION.fast,
   '--w-motion-base': MOTION.base,
   '--w-motion-ease-standard': MOTION['ease-standard'],

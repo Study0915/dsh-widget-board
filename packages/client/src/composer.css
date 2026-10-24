@@ -7,6 +7,12 @@
 
 .dsh-widget-board__composer {
   width: min(960px, calc(100% - 40px));
+  font-family: var(--dsw-font-family);
+  line-height: 1.5;
+}
+
+.dsh-widget-board__composer .dsh-widget-board__input {
+  line-height: 1.5;
 }
 
 .dsh-widget-board__composer-body {
@@ -19,6 +25,7 @@
 
 .dsh-widget-board__composer-form {
   display: flex;
+  min-width: 0;
   min-height: 0;
   flex-direction: column;
   gap: var(--w-space-lg);
@@ -289,6 +296,7 @@
 /* 预览一栏：一块自己的底，盒子按真实尺寸缩进这一栏。 */
 .dsh-widget-board__composer-preview {
   display: flex;
+  min-width: 0;
   min-height: 0;
   flex-direction: column;
   gap: var(--w-space-sm);
