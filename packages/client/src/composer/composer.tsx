@@ -22,6 +22,8 @@ import type { FrameHost } from '../frame-host'
 import type { ShellTheme } from '../theme'
 import { WidgetPreview } from '../widget-grid'
 import { SchemaForm, formPathOf } from './fields'
+import { SourceEditorPanel } from './source-panel'
+import { PreviewPanel } from './preview-panel'
 import type { Template, TemplateKey } from './templates'
 import { TEMPLATES, seedOf, templateOf } from './templates'
 
@@ -101,6 +103,12 @@ export function CardComposer({
   /** 选中组件的那份表单模型：schema 与文案按它画，创建器不必先把实例建出来。 */
   const [form, setForm] = useState<WidgetFormModel | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+  /** 高级模式：改的是组件源码而不是这张卡的内容（C4）。 */
+  const [sourceOpen, setSourceOpen] = useState(false)
+  /** 源码模式下的预览：文件与内容交给它渲染。 */
+  const [previewOpen, setPreviewOpen] = useState(false)
+  /** 源码模式里当前的���件内容：预览面板按它开一个预览会话。 */
+  const [sourceFiles, setSourceFiles] = useState<Record<string, string>>({})
   const dialogRef = useRef<HTMLDivElement | null>(null)
   const closeRef = useRef<HTMLButtonElement | null>(null)
 
@@ -295,6 +303,46 @@ export function CardComposer({
               })}
             </div>
 
+            {/* 高级模式：改的是组件源码（C4）。它有自己的面板，表单模式不受影响。 */}
+            {widgetId === null
+              ? null
+              : (
+                <div className="dsh-widget-board__composer-modes" role="group" aria-label={t('sourceTitle')}>
+                  <button
+                    type="button"
+                    className="dsh-widget-board__composer-mode"
+                    data-dsh-widget-board-mode="form"
+                    aria-pressed={!sourceOpen}
+                    disabled={saving}
+                    onClick={() => { setSourceOpen(false) }}
+                  >
+                    {t('formBasic')}
+                  </button>
+                  <button
+                    type="button"
+                    className="dsh-widget-board__composer-mode"
+                    data-dsh-widget-board-mode="source"
+                    aria-pressed={sourceOpen}
+                    disabled={saving}
+                    onClick={() => { setSourceOpen(true) }}
+                  >
+                    {t('sourceTitle')}
+                  </button>
+                </div>
+              )}
+
+            {sourceOpen && widgetId !== null
+              ? (
+                <SourceEditorPanel
+                  widgetId={widgetId}
+                  theme={theme}
+                  onSaved={() => { setSourceOpen(false) }}
+                  onFilesChanged={setSourceFiles}
+                  onClose={() => { setSourceOpen(false) }}
+                />
+              )
+              : null}
+
             {templateKey === 'advanced' && advanced === null
               ? (
                 <div className="dsh-widget-board__composer-picker" data-dsh-widget-board-composer-picker="">
@@ -327,7 +375,7 @@ export function CardComposer({
 
             {formError === null ? null : <p className="dsh-widget-board__editor-error" role="alert">{formError}</p>}
 
-            {ready && form !== null
+            {ready && form !== null && !sourceOpen
               ? sections.map((section) => {
                 const schema = section.key === 'props' ? form.propsSchema : section.key === 'data' ? form.dataSchema : form.stateSchema
                 const value = section.key === 'props' ? props : section.key === 'data' ? data : state
@@ -374,6 +422,19 @@ export function CardComposer({
                 ))}
               </span>
             </div>
+            {/* 源码模式下走真正的预览会话：文件还没进组件库时也能看到它画出来的样子（C6）。 */}
+            {sourceOpen && widgetId !== null
+              ? (
+                <PreviewPanel
+                  files={sourceFiles}
+                  props={props}
+                  data={data}
+                  state={state}
+                  theme={theme}
+                  frames={frames}
+                />
+              )
+              : null}
             {previewWidget === undefined || widgetId === null
               ? <p className="dsh-widget-board__editor-empty">{t('formPreviewHint')}</p>
               : (

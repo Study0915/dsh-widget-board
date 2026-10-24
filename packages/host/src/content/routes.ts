@@ -17,6 +17,7 @@ import type {
 import { readJson } from '../body'
 import { isRecord } from '../guards'
 import type { WidgetRecord } from '../library'
+import { recordOf } from '../library'
 import { locate } from '../lookup'
 import { Refusal } from '../refusal'
 import { json } from '../response'
@@ -244,9 +245,7 @@ export function contentRoutes(context: RouteContext): Route[] {
       limit: 0,
       async handle(_context, _request, response, match) {
         const id = decodeURIComponent(match[1] as string)
-        const record = context.records.get(id)
-        if (record === undefined) throw new Refusal(404, `组件库里没有可用的组件 ${id}`)
-        json(response, 200, { widget: formOf(record) })
+        json(response, 200, { widget: formOf(recordOf(context.records, id)) })
       },
     },
   ]
