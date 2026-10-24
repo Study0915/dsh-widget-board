@@ -81,29 +81,28 @@ function cardOf(context: RouteContext, id: string): { board: Board, instance: Bo
 }
 
 /**
- * 把这次提交的几项补齐并校验：没给的项用原值（创建时用空值），给了的项按 manifest 的 schema 核对。
+ * 把这次要写的几项与组件的 schema 核对；只校验这一次点名的那几项。
  *
- * state 也按 schema 核对：它同样是组件声明的形状，人的界面写进去之前要和组件自己写时一样过一遍。
+ * 没点名的项用实例上的原值原样保留、不过 schema：旧卡片上的值要么是 null（`/instance` 建出来就是这个），
+ * 要么是当初按当时的 schema 写进去的；组件升级过 schema 之后再用新规则卡它，会让「旧卡改个标题」这种
+ * 一次普通的编辑失败（技术契约第 3 节的「可选 props/data/state」指的是要改的那几项）。
+ *
+ * `null` 表示「还没有内容」，与 `/instance` 建卡时的初值同义：它只说明这一份没填过，不算与 schema 不符。
  *
  * @param manifest - 组件 manifest。
- * @param given - 请求里点名的那几项。
- * @param fallback - 没点名时用的值。
- * @returns 三项都要写入的值。
- * @throws {Refusal} props 不是对象，或任一项与 schema 不符。
+ * @param written - 这次点名要写的那几项。
+ * @returns 点名的几项原样；调用方把它们并进实例，未点名的项留在实例上不动。
+ * @throws {Refusal} props 不是对象，或点名的那一项与 schema 不符。
  */
 function settle(
   manifest: WidgetManifest,
-  given: { props?: Record<string, unknown>, data?: unknown, state?: unknown },
-  fallback: { props: Record<string, unknown>, data: unknown, state: unknown },
-): { props: Record<string, unknown>, data: unknown, state: unknown } {
-  if (given.props !== undefined && !isRecord(given.props)) throw new Refusal(400, 'props 要是普通的 JSON 对象')
-  const props = given.props ?? fallback.props
-  const data = 'data' in given ? given.data : fallback.data
-  const state = 'state' in given ? given.state : fallback.state
-  contentIssues('props', manifest.props, props)
-  contentIssues('data', manifest.data, data)
-  contentIssues('state', manifest.state, state)
-  return { props, data, state }
+  written: { props?: Record<string, unknown>, data?: unknown, state?: unknown },
+): { props?: Record<string, unknown>, data?: unknown, state?: unknown } {
+  if (written.props !== undefined && !isRecord(written.props)) throw new Refusal(400, 'props 要是普通的 JSON 对象')
+  if (written.props !== undefined) contentIssues('props', manifest.props, written.props)
+  if ('data' in written && written.data !== null) contentIssues('data', manifest.data, written.data)
+  if ('state' in written && written.state !== null) contentIssues('state', manifest.state, written.state)
+  return written
 }
 
 /**
@@ -131,22 +130,23 @@ export function contentRoutes(context: RouteContext): Route[] {
           throw new Refusal(409, '组件在你编辑期间变过，重读之后再来', { code: 'stale-hash', hash: record.hash })
         }
         if (wanted.layout !== undefined && !isCardLayout(wanted.layout)) throw new Refusal(400, 'layout 的列号、跨列与高度不合法')
-        const content = settle(record.manifest, wanted, { props: {}, data: null, state: null })
+        // 创建请求的三项要么都在（模板全都给全），要么显式的 null；两种都过 schema，undefined 不算点名。
+        const content = settle(record.manifest, wanted)
         const board = context.workspace.board(boardId)
-        checkContentBudget(content.state, {
+        checkContentBudget(content.state ?? null, {
           requestBytes: Buffer.byteLength(JSON.stringify(raw), 'utf8'),
           requestLimit: CONTENT_LIMIT,
           otherStateBytes: otherStateBytes(board, null),
-          handshakeBytes: handshakeBytes(record.manifest, content),
+          handshakeBytes: handshakeBytes(record.manifest, { props: content.props ?? {}, data: content.data ?? null, state: content.state ?? null }),
         })
         // 整张卡一次写进去：内容与状态都已经校验，写入失败时磁盘上还是原来那一份（D5）。
         const id = randomUUID()
         await context.workspace.save(boardId, (current) => {
           const added = instanceOf(record, current.instances, {
-            props: content.props,
+            props: content.props ?? {},
             ...(wanted.layout === undefined ? {} : { layout: wanted.layout }),
           })
-          const composed: BoardInstance = { ...added, id, data: content.data, state: content.state }
+          const composed: BoardInstance = { ...added, id, data: content.data ?? null, state: content.state ?? null }
           return { ...current, instances: [...current.instances, composed] }
         }, { layoutChanged: true, event: () => ({ type: 'board' }) })
         json(response, 201, { id, snapshot: workspaceSnapshot(context) })
@@ -169,16 +169,18 @@ export function contentRoutes(context: RouteContext): Route[] {
         if (wanted.props === undefined && !('data' in wanted) && !('state' in wanted)) {
           throw new Refusal(400, '这次内容写入没有要改的项')
         }
-        const content = settle(record.manifest, wanted, {
-          props: found.instance.props,
-          data: found.instance.data,
-          state: found.instance.state,
-        })
-        checkContentBudget(content.state, {
+        const content = settle(record.manifest, wanted)
+        // 额度与握手按「改完之后的样子」算：没点名的那几项并上实例上的原值。
+        const final = {
+          props: wanted.props === undefined ? found.instance.props : content.props,
+          data: 'data' in wanted ? content.data : found.instance.data,
+          state: 'state' in wanted ? content.state : found.instance.state,
+        }
+        checkContentBudget(final.state, {
           requestBytes: Buffer.byteLength(JSON.stringify(raw), 'utf8'),
           requestLimit: CONTENT_LIMIT,
           otherStateBytes: otherStateBytes(found.board, id),
-          handshakeBytes: handshakeBytes(record.manifest, content),
+          handshakeBytes: handshakeBytes(record.manifest, final),
         })
         // 修订号在看板写入队列里再核对一次：这里读到之后，别的窗口仍可能先写进去。
         try {
@@ -191,8 +193,10 @@ export function contentRoutes(context: RouteContext): Route[] {
               ...('data' in wanted ? { data: content.data } : {}),
             }
             const changed = withInstancePatched(current, id, patch)
-            const target = changed.instances.find((instance) => instance.id === id) as BoardInstance
-            const instances = changed.instances.map((instance) => instance.id === id ? { ...target, state: content.state } : instance)
+            // state 不在 withInstancePatched 的写入面上：它要么按请求换成这份，要么留在实例上不动。
+            const instances = 'state' in wanted
+              ? changed.instances.map((instance) => instance.id === id ? { ...instance, state: content.state } : instance)
+              : changed.instances
             return { ...changed, instances }
           }, {
             event: () => ({
