@@ -21,6 +21,7 @@ export const WIDGET_REQUIRED_FILES = ['widget.json', 'index.html', 'style.css'] 
  * 凭据值不在这里：manifest 只声明凭据的名字与用途，值由宿主的凭据服务保存（D27）。
  */
 export interface WidgetSourceModel {
+  usage?: { id: string, title: string, count: number }[]
   /** 组件 id。 */
   id: string
   /** 它来自哪里：内置、用户目录或插件提供（D17）。 */
@@ -37,6 +38,7 @@ export interface WidgetSourceModel {
   files: Record<string, string>
   /** 目录里还有哪些文件：资源与额外脚本，界面按文件列表呈现。 */
   assets: { path: string, bytes: number }[]
+  binaryFiles?: Record<string, string>
   /**
    * 这个来源能不能就地改。
    *
@@ -55,6 +57,7 @@ export interface WidgetDefineRequest {
   manifest: unknown
   /** 组件目录里的文件，键是相对路径；`widget.json` 由 manifest 生成，不必在这里。 */
   files: Record<string, string>
+  binaryFiles?: Record<string, string>
   /**
    * 更新时读到的版本哈希。
    *
@@ -93,6 +96,7 @@ export interface WidgetDraft {
   base: { hash?: string, revision?: number }
   /** 源码模式的文件内容。 */
   files?: Record<string, string>
+  binaryFiles?: Record<string, string>
   /** 表单模式的 props、data 与 state。 */
   form?: { props?: unknown, data?: unknown, state?: unknown }
   /** 什么时候写的。 */
@@ -112,6 +116,7 @@ export interface WidgetDraftSummary {
 export interface PreviewCreateRequest {
   /** 组件目录里的文件，键是相对路径。 */
   files: Record<string, string>
+  binaryFiles?: Record<string, string>
   /** 预览用的 props。 */
   props?: Record<string, unknown>
   /** 预览用的 data。 */

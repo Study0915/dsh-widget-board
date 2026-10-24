@@ -15,6 +15,7 @@
 - 新增内置组件「运行成本」：左边是宿主进程的常驻内存，右边是一块机器体检面板——堆与外部内存、系统内存、CPU 核数与负载、看板数据所在卷的磁盘余量、系统版本，外加卡片数、状态序列化总量、文档体积与组件库规模，最近 60 次采样画成折线。面板上的「再测一次」由宿主经同一条读取路径重读一次。数据源 `widget-board:system.metrics` 只读宿主自己的内存、机器读数与工作区，没有观众时不采样；卡片离开视口或页面隐藏时停止绘制与状态写入。矮盒子里保留四行带条形图的读数，堆、系统内存、CPU 与磁盘始终看得到。
 - 组件可以把链接交给宿主打开：`widget.open(url)` 发一条桥消息，由宿主页面在新标签页里开出这一页，协议只限 http 与 https。沙箱仍然不给导航与弹窗，组件拿到的只是「请宿主开一个网页」这一件事；会话里内联显示的卡片同样可用。
 - 新增内置组件「日期倒计时」：名称、日期、时刻、全天、时区与一行备注，读成距目标还有几天几时几分，到点之后改成已经过去的说法。目标时刻按指定时区的墙上时间换算，换算只借 `Intl.DateTimeFormat`，不引时区表；时区名读不出来时退回本地时区并在卡片上说明。分钟精度，每 15 秒重算一次，暂停时停掉计时器。
+- 新增按需加载的源码编辑器、独立草稿和真实沙箱预览。源码默认另存为独立用户组件，可保留当前卡片的内容与布局；明确选择更新全部实例后按 expectedHash 检查并发。组件写入、工具和导入共用来源保护与目录交换，二进制资源保持原字节。预览只更新局部状态，拒绝正式动作、能力调用和通知，并在关闭或过期时释放。
 
 ### 体验优化
 
@@ -36,6 +37,7 @@
 - New built-in widget "Running cost": the host process's resident memory on the left and a machine check panel on the right — heap and external memory, system memory, CPU cores and load, free space on the volume holding board data, and the OS version, plus card count, serialized state size, document weight and library size, with the last 60 samples drawn as a sparkline. The panel's "Measure again" button asks the host to reread through the same path. The `widget-board:system.metrics` source reads only the host's own memory, machine readings and workspace; it samples nothing without an audience and stops drawing and writing state when the card leaves the viewport or the page is hidden. Short boxes keep four rows with bars, so heap, system memory, CPU and disk stay visible.
 - Widgets can hand a link to the host: `widget.open(url)` sends one bridge message and the host page opens it in a new tab, limited to http and https. The sandbox still grants no navigation or popups — a widget only gets to ask the host to open a page, and inline cards in a session can do it too.
 - New built-in widget "Countdown": name, date, time, all-day, time zone and a line of note, read as days, hours and minutes to the target and as how long ago it was once it passes. The target is converted from wall time in the chosen zone using `Intl.DateTimeFormat` only, with no time-zone table; an unknown zone name falls back to local time and says so on the card. Minute precision, recomputed every 15 seconds, with the timer stopped while paused.
+- Add an on-demand source editor, independent drafts and a real sandbox preview. Save source as a separate user type while retaining the current card's content and layout; explicitly updating all instances checks expectedHash. Definition, tool and import paths share source protection and directory replacement, preserving binary resource bytes. Preview updates local state only, rejects formal actions, capability calls and notifications, and releases sessions on close or expiry.
 
 ### Improvements
 

@@ -10,11 +10,14 @@
  */
 import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 import type { WidgetManifest, WidgetRoot, WidgetSource } from '@dsh-widget-board/contracts'
 import { isRecord } from '../guards'
 import { contentHash, manifestProblem, readWidget, writeTree } from '../library'
 import type { WidgetRecord } from '../library'
 import { Refusal } from '../refusal'
+import { buildDocument, freshNonce } from '../document'
+import type { DocumentAssets } from '../document'
 
 /** 组件 id 的形状：与 `widget_define` 与 manifest 的 schema 一致。 */
 export const WIDGET_ID_PATTERN = /^[a-z][a-z0-9-]{1,39}$/
@@ -31,7 +34,7 @@ export const WIDGET_MAX_TOTAL_BYTES = 16 * 1024 * 1024
 /** 一份文件：相对路径与内容。 */
 export interface WidgetFileInput {
   path: string
-  content: string
+  content: string | Buffer
 }
 
 /** 一次写入要落到磁盘的全部内容。 */
@@ -73,7 +76,7 @@ export function normalizeWidgetPath(path: string): string {
   if (normalized === '') throw new Refusal(400, '组件目录里有一个空路径')
   if (normalized.startsWith('/')) throw new Refusal(400, `文件路径 ${path} 要留在组件目录之内`)
   if (/^[a-zA-Z]:/.test(normalized)) throw new Refusal(400, `文件路径 ${path} 要留在组件目录之内`)
-  if (normalized.split('/').includes('..')) throw new Refusal(400, `文件路径 ${path} 要留在组件目录之内`)
+  if (normalized.split('/').some((part) => part === '..' || part === '.' || part === '' || /[<>:"|?*\u0000-\u001f]/.test(part) || /[. ]$/.test(part) || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))) throw new Refusal(400, `文件路径 ${path} 要留在组件目录之内`)
   return normalized
 }
 
@@ -91,7 +94,7 @@ export function checkWidgetFiles(files: readonly WidgetFileInput[]): void {
   }
   let total = 0
   for (const file of files) {
-    const bytes = Buffer.byteLength(file.content, 'utf8')
+    const bytes = typeof file.content === 'string' ? Buffer.byteLength(file.content, 'utf8') : file.content.byteLength
     if (bytes > WIDGET_MAX_FILE_BYTES) {
       throw new Refusal(413, `${file.path} 超过 ${String(WIDGET_MAX_FILE_BYTES)} 字节`)
     }
@@ -123,10 +126,10 @@ export function userRootOf(roots: readonly WidgetRoot[]): WidgetRoot {
  * @returns 建议的用户组件 id。
  */
 export function suggestedUserId(id: string, source: WidgetSource): string {
-  if (source === 'user') return id
+  void source
   const slug = id.replace(/[^a-z0-9-]/g, '-').replace(/^-+/, '').replace(/-+$/, '').slice(0, 24) || 'widget'
   // 目录名要与 manifest 的 id 一致（C4）；`user-` 前缀说明它是从别处复制来的。
-  return `user-${slug}`.slice(0, 39)
+  return `user-${slug}-${randomUUID().slice(0, 8)}`.slice(0, 40)
 }
 
 /**
@@ -140,12 +143,13 @@ function filesOf(manifest: WidgetManifest, files: readonly WidgetFileInput[]): {
   const manifestText = `${JSON.stringify(manifest, null, 2)}\n`
   const all = [
     { path: 'widget.json', content: Buffer.from(manifestText, 'utf8') },
-    ...files.map((file) => ({ path: file.path, content: Buffer.from(file.content, 'utf8') })),
+    ...files.map((file) => ({ path: file.path, content: typeof file.content === 'string' ? Buffer.from(file.content, 'utf8') : file.content })),
   ]
   const seen = new Set<string>()
   for (const file of all) {
-    if (seen.has(file.path)) throw new Refusal(400, `文件 ${file.path} 出现了两次`)
-    seen.add(file.path)
+    const key = file.path.toLowerCase()
+    if (seen.has(key)) throw new Refusal(400, `文件 ${file.path} 出现了两次`)
+    seen.add(key)
   }
   return all
 }
@@ -166,7 +170,22 @@ function filesOf(manifest: WidgetManifest, files: readonly WidgetFileInput[]): {
  * @returns 写下的组件。
  * @throws {Refusal} 来源不允许、并发冲突、manifest 或文件不合法、超过上限。
  */
-export async function writeWidgetType(options: {
+const writes = new Map<string, Promise<unknown>>()
+
+export async function writeWidgetType(options: Parameters<typeof writeUnlocked>[0]): Promise<WidgetWriteResult> {
+  const key = userRootOf(options.roots).dir
+  const previous = writes.get(key) ?? Promise.resolve()
+  const pending = previous.catch(() => undefined).then(async () => await writeUnlocked(options))
+  writes.set(key, pending)
+  try {
+    return await pending
+  } finally {
+    if (writes.get(key) === pending) writes.delete(key)
+  }
+}
+
+async function writeUnlocked(options: {
+  assets?: DocumentAssets
   roots: readonly WidgetRoot[]
   records: () => Map<string, WidgetRecord>
   request: WidgetWriteRequest
@@ -185,6 +204,7 @@ export async function writeWidgetType(options: {
   const files = request.files.map((file) => ({ path: normalizeWidgetPath(file.path), content: file.content }))
   checkWidgetFiles(files)
   const all = filesOf(manifest, files)
+  checkWidgetFiles(all)
 
   const root = userRootOf(roots)
   const existing = options.records().get(request.id)
@@ -210,16 +230,17 @@ export async function writeWidgetType(options: {
   }
 
   const dir = join(root.dir, request.id)
+  await mkdir(root.dir, { recursive: true })
   // 同父目录下的暂存目录：交换时目录项的改名是原子的，读库不会看到半写状态（D5）。
-  const staging = `${dir}.staging`
-  const retired = `${dir}.retired`
-  await rm(staging, { recursive: true, force: true })
-  await rm(retired, { recursive: true, force: true })
+  const temporaryId = randomUUID()
+  const staging = join(dirname(root.dir), `.widget-${temporaryId}.staging`)
+  const retired = join(dirname(root.dir), `.widget-${temporaryId}.retired`)
   await writeTree(staging, all)
   // 先验证暂存目录：manifest 与必需文件不合格时不碰旧目录。
   let staged: WidgetRecord
   try {
     staged = await readWidget(staging, { source: 'user' })
+    if (options.assets !== undefined) buildDocument(staged, options.assets, freshNonce(), { lang: 'zh-CN' })
   } catch (error) {
     await rm(staging, { recursive: true, force: true })
     throw new Refusal(400, (error as Error).message)
@@ -237,7 +258,15 @@ export async function writeWidgetType(options: {
       throw error
     }
     // 旧版本已经入版本库（`reload` 会记住它）之后才清理旧目录。
-    await reload()
+    try {
+      await reload()
+    } catch (error) {
+      await rename(dir, staging)
+      await rename(retired, dir)
+      await rm(staging, { recursive: true, force: true })
+      await reload()
+      throw error
+    }
     await rm(retired, { recursive: true, force: true })
   }
   await reload()
@@ -273,6 +302,7 @@ export function sourceModelOf(record: WidgetRecord, roots: readonly WidgetRoot[]
   manifest: string
   files: Record<string, string>
   assets: { path: string, bytes: number }[]
+  binaryFiles: Record<string, string>
   writable: boolean
   suggestedId?: string
 } {
@@ -280,10 +310,14 @@ export function sourceModelOf(record: WidgetRecord, roots: readonly WidgetRoot[]
   const manifestText = manifestFile === undefined ? '{}' : manifestFile.toString('utf8')
   const files: Record<string, string> = {}
   const assets: { path: string, bytes: number }[] = []
+  const binaryFiles: Record<string, string> = {}
   for (const [path, content] of record.files) {
     if (path === 'widget.json') continue
     if (isTextual(path)) files[path] = content.toString('utf8')
-    else assets.push({ path, bytes: content.byteLength })
+    else {
+      assets.push({ path, bytes: content.byteLength })
+      binaryFiles[path] = content.toString('base64')
+    }
   }
   const writable = record.source === 'user'
   return {
@@ -295,9 +329,20 @@ export function sourceModelOf(record: WidgetRecord, roots: readonly WidgetRoot[]
     manifest: manifestText,
     files,
     assets,
+    binaryFiles,
     writable,
     ...(writable ? {} : { suggestedId: suggestedUserId(record.manifest.id, record.source) }),
   }
+}
+
+/** 二进制资源保持原始字节；所有入口仍执行同一份路径与额度检查。 */
+export function binaryInputs(value: unknown): WidgetFileInput[] {
+  if (value === undefined) return []
+  if (!isRecord(value)) throw new Refusal(400, 'binaryFiles 要是 base64 文件表')
+  return Object.entries(value).map(([path, content]) => {
+    if (typeof content !== 'string' || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(content)) throw new Refusal(400, '资源不是合法 base64')
+    return { path: normalizeWidgetPath(path), content: Buffer.from(content, 'base64') }
+  })
 }
 
 /**

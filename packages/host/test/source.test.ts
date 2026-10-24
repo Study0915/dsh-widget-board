@@ -7,7 +7,7 @@
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { HostRequest, HostResponse, WidgetRoot } from '@dsh-widget-board/contracts'
 import { PLUGIN_ROUTE } from '@dsh-widget-board/contracts'
 import { createHandler } from '../src/routes'
@@ -483,7 +483,92 @@ describe('草稿', () => {
   })
 })
 
+describe('源码应用与资源', () => {
+  it('正式保存前构建文档，拒绝缺失的脚本并保留旧目录', async () => {
+    const test = await harness(['mine'])
+    const record = test.records().get('mine')!
+    const before = await readFile(join(test.userDir, 'mine/index.html'), 'utf8')
+    const response = await test.send('POST', '/library/define', { id: 'mine', expectedHash: record.hash, manifest: { ...record.manifest, scripts: ['missing.js'] }, files: { 'index.html': '<p>new</p>', 'style.css': '' } })
+    expect(response.status).toBe(400)
+    expect(await readFile(join(test.userDir, 'mine/index.html'), 'utf8')).toBe(before)
+  })
+  it('应用只改变当前实例的组件与 hash，保留内容和布局', async () => {
+    const test = await harness(['mine', 'next'])
+    const composed = await test.send('POST', '/boards/board/compose', { widget: 'mine', props: { name: '保留' }, state: { count: 2 }, data: [1] })
+    const id = (JSON.parse(composed.body) as { id: string }).id
+    const before = test.context.workspace.findInstance(id)!
+    const original = structuredClone(before.instance)
+    const record = test.records().get('next')!
+    const applied = await test.send('POST', `/instance/${id}/source`, { widget: 'next', expectedHash: record.hash, expectedRevision: before.board.revision })
+    expect(applied.status).toBe(200)
+    expect(test.context.workspace.findInstance(id)!.instance).toEqual({ ...original, widget: 'next', hash: record.hash })
+    expect((await test.send('POST', `/instance/${id}/source`, { widget: 'mine', expectedHash: test.records().get('mine')!.hash, expectedRevision: before.board.revision })).status).toBe(409)
+  })
+
+  it('新 schema 不兼容时保留原实例', async () => {
+    const test = await harness(['mine', 'next'])
+    test.records().get('next')!.manifest.props = { type: 'object', required: ['required'], properties: { required: { type: 'number' } } }
+    const composed = await test.send('POST', '/boards/board/compose', { widget: 'mine', props: { title: '原内容' } })
+    const id = JSON.parse(composed.body).id as string
+    const before = structuredClone(test.context.workspace.findInstance(id)!.instance)
+    const applied = await test.send('POST', `/instance/${id}/source`, { widget: 'next', expectedHash: test.records().get('next')!.hash, expectedRevision: test.context.workspace.active().revision })
+    expect(applied.status).toBe(400)
+    expect(test.context.workspace.findInstance(id)!.instance).toEqual(before)
+  })
+
+  it('二进制资源经过定义和源码响应保持原始字节', async () => {
+    const test = await harness()
+    const bytes = Buffer.from([0, 255, 128, 35, 10])
+    const files = filesOf('binary')
+    const defined = await test.send('POST', '/library/define', { id: 'binary', manifest: JSON.parse(files.get('widget.json')!.toString()), files: { 'index.html': '<p/>', 'style.css': '' }, binaryFiles: { 'assets/picture.png': bytes.toString('base64') } })
+    expect(defined.status).toBe(201)
+    expect(await readFile(join(test.userDir, 'binary/assets/picture.png'))).toEqual(bytes)
+    const source = JSON.parse((await test.send('GET', '/library/binary/source')).body)
+    expect(Buffer.from(source.binaryFiles['assets/picture.png'], 'base64')).toEqual(bytes)
+  })
+
+  it('两个窗口用同一 expectedHash 写入，只允许一个成功', async () => {
+    const test = await harness(['mine'])
+    const hash = test.records().get('mine')!.hash
+    const manifest = test.records().get('mine')!.manifest
+    const results = await Promise.all(['first', 'second'].map(async (text) => await test.send('POST', '/library/define', { id: 'mine', manifest, expectedHash: hash, files: { 'index.html': `<p>${text}</p>`, 'style.css': '' } })))
+    expect(results.map((result) => result.status).sort()).toEqual([200, 409])
+  })
+})
+
 describe('预览会话', () => {
+  it('预览与正式定义同样拒绝非法 manifest 和路径', async () => {
+    const test = await harness()
+    const files = Object.fromEntries([...filesOf('demo')].map(([path, content]) => [path, content.toString('utf8')]))
+    for (const path of ['../escape.js', 'C:/escape.js', 'assets/./a.js', 'assets/x:stream', 'assets/CON']) {
+      expect((await test.send('POST', '/preview', { files: { ...files, [path]: 'x' } })).status).toBe(400)
+    }
+    expect((await test.send('POST', '/preview', { files: { ...files, 'widget.json': '{"id":"demo"}' } })).status).toBe(400)
+    expect((await test.send('POST', '/preview', { files: { ...files, 'main.js': 'x'.repeat(4 * 1024 * 1024 + 1) } })).status).toBe(413)
+  })
+
+  it('过期会话释放内存并拒绝读取', async () => {
+    const test = await harness()
+    vi.useFakeTimers()
+    try {
+      const files = Object.fromEntries([...filesOf('demo')].map(([path, content]) => [path, content.toString('utf8')]))
+      const created = await test.context.previews!.create({ files, props: {}, data: null, state: null }, test.context.live.assets)
+      vi.advanceTimersByTime(10 * 60 * 1000 + 1)
+      expect(test.context.previews!.size()).toBe(0)
+      expect(test.context.previews!.get(created.previewId)).toBeUndefined()
+    } finally { vi.useRealTimers() }
+  })
+
+  it('校验 schema 并计算 manifest 文案在内的握手额度', async () => {
+    const test = await harness()
+    const files = Object.fromEntries([...filesOf('demo')].map(([path, content]) => [path, content.toString('utf8')]))
+    const manifest = JSON.parse(files['widget.json'] as string)
+    manifest.props = { type: 'object', required: ['name'], properties: { name: { type: 'string' } } }
+    expect((await test.send('POST', '/preview', { files: { ...files, 'widget.json': JSON.stringify(manifest) }, props: {} })).status).toBe(400)
+    delete manifest.props
+    manifest.text = { big: { zh: 'x'.repeat(65000), en: 'x' } }
+    expect((await test.send('POST', '/preview', { files: { ...files, 'widget.json': JSON.stringify(manifest) } })).status).toBe(413)
+  })
   it('新建后拿到一个不可猜测的 id，文档能画出来', async () => {
     const test = await harness()
     const created = await test.send('POST', '/preview', {

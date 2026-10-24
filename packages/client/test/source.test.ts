@@ -25,12 +25,13 @@ describe('语言判定', () => {
 
 describe('来源规则', () => {
   it('只读源另存为一个新的用户组件 id', () => {
-    expect(suggestedIdOf('clock', 'builtin')).toBe('user-clock')
-    expect(suggestedIdOf('clock', 'plugin')).toBe('user-clock')
+    expect(suggestedIdOf('clock', 'builtin')).toMatch(/^user-clock-[a-f0-9]{8}$/)
+    expect(suggestedIdOf('clock', 'plugin')).toMatch(/^user-clock-[a-f0-9]{8}$/)
   })
 
-  it('用户组件就地改，id 不变', () => {
-    expect(suggestedIdOf('mine', 'user')).toBe('mine')
+  it('用户组件默认另存，每次分配独立 id', () => {
+    expect(suggestedIdOf('mine', 'user')).toMatch(/^user-mine-[a-f0-9]{8}$/)
+    expect(suggestedIdOf('mine', 'user')).not.toBe(suggestedIdOf('mine', 'user'))
   })
 
   it('另存用的 id 满足组件 id 的形状', () => {
@@ -42,6 +43,6 @@ describe('来源规则', () => {
 
   it('就地改还是另存，看的是来源', () => {
     expect(suggestedIdOf('clock', 'builtin')).not.toBe('clock')
-    expect(suggestedIdOf('mine', 'user')).toBe('mine')
+    expect(suggestedIdOf('mine', 'user')).not.toBe('mine')
   })
 })

@@ -46,6 +46,7 @@ function draftOf(value: unknown): Omit<WidgetDraft, 'draftId' | 'updatedAt'> & {
       : { kind: 'widget', widgetId: target.widgetId as string },
     base: value.base === undefined ? {} : value.base as WidgetDraft['base'],
     ...(value.files === undefined ? {} : { files: value.files as Record<string, string> }),
+    ...(value.binaryFiles === undefined ? {} : { binaryFiles: value.binaryFiles as Record<string, string> }),
     ...(value.form === undefined ? {} : { form: value.form as WidgetDraft['form'] }),
   }
 }

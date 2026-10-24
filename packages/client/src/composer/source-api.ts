@@ -82,10 +82,11 @@ export async function defineWidget(body: WidgetDefineRequest): Promise<WidgetDef
     body: JSON.stringify(body),
   })
   if (!response.ok) {
+    const failureResponse = response.clone()
     const message = await errorOf(response, '存不下这个组件')
     let current: string | undefined
     try {
-      const failure = await response.clone().json() as { code?: string, current?: string }
+      const failure = await failureResponse.json() as { code?: string, current?: string }
       if (failure.code === 'stale-hash') {
         current = typeof failure.current === 'string' ? failure.current : undefined
         throw new SourceConflictError(message, current)

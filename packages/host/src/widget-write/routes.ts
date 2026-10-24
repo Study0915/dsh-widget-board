@@ -11,7 +11,8 @@ import { recordOf } from '../library'
 import { Refusal } from '../refusal'
 import { json } from '../response'
 import type { Route, RouteContext } from '../routes'
-import { sourceModelOf, writeWidgetType } from '../widget-write/write'
+import { binaryInputs, sourceModelOf, writeWidgetType } from '../widget-write/write'
+import { applySourceRoute } from './apply'
 
 /** 写一个组件类型的请求体上限：一整个组件目录，比一张卡的内容大（技术契约 4）。 */
 export const DEFINE_LIMIT = 1024 * 1024
@@ -42,13 +43,15 @@ function filesOf(value: unknown): { path: string, content: string }[] {
  */
 export function sourceRoutes(context: RouteContext): Route[] {
   return [
+    applySourceRoute(),
     {
       method: 'GET',
       pattern: /^\/library\/([^/]+)\/source$/,
       limit: 0,
       async handle(_context, _request, response, match) {
         const id = decodeURIComponent(match[1] as string)
-        json(response, 200, sourceModelOf(recordOf(context.records, id), context.roots))
+        const boards = context.workspace.list().map((board) => ({ id: board.id, title: board.title, count: board.instances.filter((instance) => instance.widget === id).length })).filter((board) => board.count > 0)
+        json(response, 200, { ...sourceModelOf(recordOf(context.records, id), context.roots), usage: boards })
       },
     },
     {
@@ -61,12 +64,13 @@ export function sourceRoutes(context: RouteContext): Route[] {
         if (typeof body.id !== 'string' || body.id === '') throw new Refusal(400, '组件定义要写明 id')
         const expectedHash = typeof body.expectedHash === 'string' && body.expectedHash !== '' ? body.expectedHash : undefined
         const written = await writeWidgetType({
+          assets: context.live.assets,
           roots: context.roots,
           records: () => context.records,
           request: {
             id: body.id,
             manifest: body.manifest,
-            files: filesOf(body.files),
+            files: [...filesOf(body.files), ...binaryInputs(body.binaryFiles)],
             ...(expectedHash === undefined ? {} : { expectedHash }),
           },
           reload: context.refresh,
