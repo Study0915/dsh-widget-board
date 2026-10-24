@@ -68,13 +68,14 @@ export function checkContentBudget(state: unknown, budget: ContentBudget): void 
 /**
  * 一次握手消息的字节数：`init` 带着 props、data、state 与文案，前端把这一份递给组件。
  *
- * 卡片状态小于额度不等于握手一定装得下——组件自己声明的文案也算在里面（技术契约 3）。
+ * 卡片状态小于额度不等于握手一定装得下——组件自己声明的文案也算在里面（技术契约 3）。没点名的那几项
+ * 由调用方并上实例上的原值再进来，这里的三个键都是最终值。
  *
  * @param manifest - 组件 manifest。
  * @param content - 这次要交出去的几项。
  * @returns 序列化之后的字节数。
  */
-export function handshakeBytes(manifest: WidgetManifest, content: { props: unknown, data: unknown, state: unknown }): number {
+export function handshakeBytes(manifest: WidgetManifest, content: { props?: unknown, data?: unknown, state?: unknown }): number {
   return stateBytes({
     type: 'init',
     props: content.props,

@@ -147,15 +147,16 @@ async function storedBoard(home: string): Promise<Board> {
 /**
  * 起一套替身：`.debug/` 下写一份索引与一块看板，再打开工作区。
  *
+ * @param overrides - 想换掉那块看板时给一份自己的；缺省是两张内容齐全的卡。
  * @returns 上下文、推出去的事件、临时目录与发请求的函数。
  */
-async function harness(): Promise<Harness> {
+async function harness(overrides: { board?: Board } = {}): Promise<Harness> {
   const events: BoardEvent[] = []
   await mkdir(join(ROOT, '.debug'), { recursive: true })
   const home = await mkdtemp(join(ROOT, '.debug', 'content-test-'))
   homes.push(home)
   await mkdir(join(home, 'boards'), { recursive: true })
-  await writeBoard(join(home, 'boards', 'board.json'), board())
+  await writeBoard(join(home, 'boards', 'board.json'), overrides.board ?? board())
   await writeFile(join(home, 'boards.json'), `${JSON.stringify({ version: 1, active: 'board', boards: ['board'] })}\n`, 'utf8')
   const records = new Map([[RECORD.manifest.id, RECORD]])
   const workspace = await openWorkspace(home, records, (event) => { events.push(event) })
@@ -325,6 +326,42 @@ describe('编辑实例内容', () => {
     expect(edited?.data).toEqual(before.instances[0]?.data)
     expect(edited?.layout).toEqual(before.instances[0]?.layout)
     expect(after.revision).toBe(3)
+  })
+
+  it('老卡片上 state 与 data 还是 null 时，只改 props 不被组件自己的 schema 挡住', async () => {
+    // `/instance` 建出来的卡初值就是 null（state.ts 的 instanceOf）；null 只说明「还没填过」，
+    // 不该按组件当前的 schema 判为不符——否则旧卡连一次普通的 props 编辑都做不了。
+    const nullBoard = board()
+    nullBoard.instances = [{ id: 'null-card', widget: 'weather', hash: HASH, props: {}, data: null, state: null, layout: { x: 0, y: 0, w: 1, h: 22 } }]
+    const test = await harness({ board: nullBoard })
+    const read = await test.send('GET', '/instance/null-card/content')
+    const revision = (JSON.parse(read.body) as { revision: number }).revision
+    const response = await test.send('POST', '/instance/null-card/content', JSON.stringify({
+      expectedRevision: revision,
+      props: { city: '广州', unit: 'c' },
+    }))
+    expect(response.status).toBe(200)
+    const saved = JSON.parse(response.body) as { revision: number, props: unknown, state: unknown }
+    expect(saved.props).toEqual({ city: '广州', unit: 'c' })
+    expect(saved.state).toBeNull()
+  })
+
+  it('老卡片上 state 与 data 还是 null 时，只改 props 不被组件自己的 schema 挡住', async () => {
+    // `/instance` 建出来的卡初值就是 null（state.ts 的 instanceOf）；null 只说明「还没填过」，
+    // 不该按组件当前的 schema 判为不符——否则旧卡连一次普通的 props 编辑都做不了。
+    const nullBoard = board()
+    nullBoard.instances = [{ id: 'null-card', widget: 'weather', hash: HASH, props: {}, data: null, state: null, layout: { x: 0, y: 0, w: 1, h: 22 } }]
+    const test = await harness({ board: nullBoard })
+    const read = await test.send('GET', '/instance/null-card/content')
+    const revision = (JSON.parse(read.body) as { revision: number }).revision
+    const response = await test.send('POST', '/instance/null-card/content', JSON.stringify({
+      expectedRevision: revision,
+      props: { city: '广州', unit: 'c' },
+    }))
+    expect(response.status).toBe(200)
+    const saved = JSON.parse(response.body) as { revision: number, props: unknown, state: unknown }
+    expect(saved.props).toEqual({ city: '广州', unit: 'c' })
+    expect(saved.state).toBeNull()
   })
 
   it('修订号过期时回 409、当前修订号与快照，磁盘上仍是原来的内容', async () => {
