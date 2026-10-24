@@ -10,7 +10,7 @@
  */
 import type { CardLayout, WidgetMinBox } from '@dsh-widget-board/contracts'
 import type { GridMetrics } from './grid'
-import { MAX_COLUMNS, clampCardBox, snapCardHeight } from './grid'
+import { MAX_COLUMNS, clampCardBox, readOrderOf, snapCardHeight } from './grid'
 
 /** 一个排列单元要摆多大：宽度按列，高度按根字号的倍数（高度档）。 */
 export interface AlignedBox {
@@ -208,20 +208,13 @@ export function withoutItems(
  * 按卡片当前的自由位置给出一份整齐顺序：先按 y、再按 x，同一位置按原顺序（B2）。
  *
  * 第一次切到整齐模式时用它，把屏幕上已经排好的样子按阅读顺序留成顺序；之后不再重新生成。
+ * 排序规则与自由布局「整理」的是同一条，抽在 `grid` 的 `readOrderOf` 里。
  *
  * @param items - 卡片 id 与它们此刻的自由布局。
  * @returns 顺序。
  */
 export function orderFromFree(items: readonly { id: string, layout: CardLayout }[]): string[] {
-  return items
-    .map((item, index) => ({ item, index }))
-    .sort((left, right) => {
-      const y = left.item.layout.y - right.item.layout.y
-      if (y !== 0) return y
-      const x = left.item.layout.x - right.item.layout.x
-      return x !== 0 ? x : left.index - right.index
-    })
-    .map(({ item }) => item.id)
+  return readOrderOf(items.map((item) => ({ id: item.id, layout: item.layout }))).map((item) => item.id)
 }
 
 /**

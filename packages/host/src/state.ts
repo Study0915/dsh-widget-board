@@ -649,6 +649,21 @@ export function arrangementUnitOf(board: Board, instance: BoardInstance): string
 }
 
 /**
+ * 组的排列单元：加完一组之后接进整齐偏好的那一份（D29）。
+ *
+ * 组在偏好里占一格，单元 id 是正面实例的 id，盒子取组的落点盒子。真实宿主与演示宿主的加组路由
+ * 都走这一条，两边不会算出不同的单元。
+ *
+ * @param added - 刚加完组的看板。
+ * @param groupId - 新组的 id。
+ * @returns 要接进偏好的一个排列单元；找不到正面实例时是空表。
+ */
+export function groupUnitOf(added: Board, groupId: string): { id: string, box: AlignedBox }[] {
+  const frontInstance = added.instances.find((instance) => instance.group?.id === groupId && instance.group.side === 'front')
+  return frontInstance === undefined ? [] : [{ id: frontInstance.id, box: { w: frontInstance.layout.w, h: frontInstance.layout.h } }]
+}
+
+/**
  * 把一次排列偏好的提交写进看板（D29）：模式、整齐顺序与期望宽高一起换。
  *
  * 不合法的提交整体拒绝，不留下半份新偏好。盒子先收进合法列数与高度档。
