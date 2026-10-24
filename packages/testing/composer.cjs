@@ -228,6 +228,7 @@ async function contentPass(page, check) {
   await page.locator(selector).click()
   await page.waitForSelector('[data-dsh-widget-board-editor]', { timeout: 10000 })
   const entry = page.locator('[data-dsh-widget-board-editor-content]')
+  await entry.waitFor({ state: 'visible', timeout: 10000 })
   check('卡片设置里有编辑内容入口', await entry.count() === 1)
   await entry.click()
   await page.waitForSelector('[data-dsh-widget-board-content-editor]', { timeout: 10000 })
