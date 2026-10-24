@@ -13,6 +13,7 @@ import type { WidgetSourceModel } from '@dsh-widget-board/contracts'
 import { t } from '../copy'
 import type { ShellTheme } from '../theme'
 import { defineWidget, fetchWidgetSource, SourceConflictError } from './source-api'
+import { fetchDraft as fetchDraftRequest, removeDraft as removeDraftRequest, saveDraft as saveDraftRequest } from './source-api'
 import { suggestedIdOf } from './source-rules'
 import { isRecord } from './schema'
 import { loadSourceEditor } from './source-editor-loader'
@@ -68,6 +69,12 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
   const [files, setFiles] = useState<Record<string, string>>({})
   const [active, setActive] = useState<FileName>('index.html')
   const [saving, setSaving] = useState(false)
+  /** 关闭时先问一句：存草稿、放弃还是继续编辑（C13）。 */
+  const [confirmClose, setConfirmClose] = useState(false)
+  /** 这一份草稿的 id：存过一次之后，继续编辑按它更新，不另起一份。 */
+  const [draftId, setDraftId] = useState<string | null>(null)
+  /** 草稿存好了：面板上给一句看得见的说法。 */
+  const [draftSaved, setDraftSaved] = useState(false)
   /** 编辑器还没取到：这一段先显示一份纯文本的兜底，取到了就换过去。 */
   const [editorReady, setEditorReady] = useState(false)
   const editorRef = useRef<SourceEditor | null>(null)
@@ -106,12 +113,19 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
     return () => { live = false }
   }, [])
 
-  // 编辑器就位后建出来；文件换了就把内容灌进去。
+  // 编辑器就位后建出来；换了文件或换了主题才重建。
+  //
+  // 内容变了不重建：重建会把光标与撤销历史一起丢掉，那正是人在编辑器里要的东西（D11）。
+  // 内容灌进编辑器由下面那个效果负责。
+  const createdFor = useRef<string>('')
   useEffect(() => {
     if (!editorReady) return
     const host = hostRef.current
     const module = editorModule.current
     if (host === null || module === null) return
+    const key = `${active}|${isDark(theme) ? 'dark' : 'light'}`
+    if (createdFor.current === key) return
+    createdFor.current = key
     const editor = module.createSourceEditor({
       parent: host,
       value: files[active] ?? '',
@@ -124,7 +138,15 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
       editor.destroy()
       editorRef.current = null
     }
-  }, [editorReady, active, theme, files])
+  }, [editorReady, active, theme])
+
+  // 内容变了灌进编辑器——只在它与编辑器里的不一样时灌，免得把光标顶走。
+  useEffect(() => {
+    const editor = editorRef.current
+    if (editor === null) return
+    const text = files[active] ?? ''
+    if (editor.content() !== text) editor.setContent(text)
+  }, [active, files])
 
   const writable = model?.writable === true
   const changed = useMemo(() => {
@@ -137,6 +159,57 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
   useEffect(() => {
     onFilesChanged?.(files)
   }, [files, onFilesChanged])
+
+  /**
+   * 存一份草稿：草稿住在插件自己的目录里，凭据值不进来（技术契约 4、C12）。
+   *
+   * @returns 存下的草稿 id；失败时是 `null`。
+   */
+  const saveDraft = async (): Promise<string | null> => {
+    if (model === null) return null
+    setError(null)
+    try {
+      const saved = await saveDraftRequest({
+        ...(draftId === null ? {} : { draftId }),
+        target: { kind: 'widget', widgetId: targetId },
+        base: { hash: model.hash },
+        files,
+      })
+      setDraftId(saved.draftId)
+      setDraftSaved(true)
+      return saved.draftId
+    } catch (caught) {
+      setError((caught as Error).message)
+      return null
+    }
+  }
+
+  /**
+   * 恢复一份草稿：文件回到编辑器里，人可以接着改（C13）。
+   */
+  const restoreDraft = async (): Promise<void> => {
+    if (draftId === null) return
+    setError(null)
+    try {
+      const draft = await fetchDraftRequest(draftId)
+      if (draft.files === undefined) return
+      setFiles(draft.files)
+      setDraftSaved(true)
+    } catch (caught) {
+      setError((caught as Error).message)
+    }
+  }
+
+  /**
+   * 关掉面板：有未保存的内容时先问一句——存草稿、放弃还是继续编辑（C13）。
+   */
+  const requestClose = (): void => {
+    if (!changed || confirmClose) {
+      onClose()
+      return
+    }
+    setConfirmClose(true)
+  }
 
   /**
    * 写下去：只读源另存为一个新的用户组件，已有用户组件按当前的哈希就地改。
@@ -160,6 +233,8 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
         files: rest,
         ...(writable && targetId === model.id ? { expectedHash: model.hash } : {}),
       })
+      // 正式保存成功之后，这一��草稿就可以删掉了（技术契约 4）。
+      if (draftId !== null) await removeDraftRequest(draftId).catch(() => undefined)
       onSaved({ id: written.id, hash: written.hash })
     } catch (caught) {
       if (caught instanceof SourceConflictError) {
@@ -193,7 +268,7 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
           type="button"
           className="dsh-widget-board__editor-close"
           data-dsh-widget-board-source-close=""
-          onClick={onClose}
+          onClick={requestClose}
           title={t('close')}
         >
           ×
@@ -247,19 +322,90 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
 
       {error === null ? null : <p className="dsh-widget-board__editor-error" role="alert">{error}</p>}
 
-      <footer className="dsh-widget-board__source-foot">
-        <button type="button" className="dsh-widget-board__editor-ghost" onClick={onClose}>{t('cancel')}</button>
-        <span className="dsh-widget-board__editor-spacer" />
-        <button
-          type="button"
-          className="dsh-widget-board__editor-primary"
-          data-dsh-widget-board-source-save=""
-          disabled={saving || model === null || !changed}
-          onClick={() => { void save() }}
-        >
-          {saving ? t('saving') : t('sourceSave')}
-        </button>
-      </footer>
+      {/* 关闭时先问一句：存草稿、放弃还是继续编辑（C13）。 */}
+      {confirmClose
+        ? (
+          <footer className="dsh-widget-board__source-foot" data-dsh-widget-board-source-close-choice="">
+            <p className="dsh-widget-board__editor-note">{t('draftUnsaved')}</p>
+            <div className="dsh-widget-board__editor-actions">
+              <button
+                type="button"
+                className="dsh-widget-board__editor-ghost"
+                data-dsh-widget-board-source-keep=""
+                onClick={() => { setConfirmClose(false) }}
+              >
+                {t('formKeepEditing')}
+              </button>
+              <button
+                type="button"
+                className="dsh-widget-board__editor-ghost"
+                data-dsh-widget-board-source-draft=""
+                onClick={() => {
+                  void saveDraft().then((id) => {
+                    if (id === null) return
+                    onClose()
+                  })
+                }}
+              >
+                {t('draftSave')}
+              </button>
+              <button
+                type="button"
+                className="dsh-widget-board__editor-primary"
+                data-dsh-widget-board-source-discard=""
+                onClick={onClose}
+              >
+                {t('formDiscard')}
+              </button>
+            </div>
+          </footer>
+        )
+        : (
+          <footer className="dsh-widget-board__source-foot">
+            <button
+              type="button"
+              className="dsh-widget-board__editor-ghost"
+              data-dsh-widget-board-source-draft-save=""
+              disabled={model === null || !changed}
+              onClick={() => { void saveDraft() }}
+            >
+              {t('draftSave')}
+            </button>
+            {draftId === null
+              ? null
+              : (
+                <button
+                  type="button"
+                  className="dsh-widget-board__editor-ghost"
+                  data-dsh-widget-board-source-draft-restore=""
+                  onClick={() => { void restoreDraft() }}
+                >
+                  {t('draftRestore')}
+                </button>
+              )}
+            {draftSaved
+              ? <span className="dsh-widget-board__editor-ok">{t('draftSaved')}</span>
+              : null}
+            <span className="dsh-widget-board__editor-spacer" />
+            <button
+              type="button"
+              className="dsh-widget-board__editor-ghost"
+              data-dsh-widget-board-source-cancel=""
+              onClick={requestClose}
+            >
+              {t('cancel')}
+            </button>
+            <button
+              type="button"
+              className="dsh-widget-board__editor-primary"
+              data-dsh-widget-board-source-save=""
+              disabled={saving || model === null || !changed}
+              onClick={() => { void save() }}
+            >
+              {saving ? t('saving') : t('sourceSave')}
+            </button>
+          </footer>
+        )}
     </div>
   )
 }
