@@ -231,6 +231,18 @@ async function sourcePass(page, check) {
     return { status: response.status, body: await response.json() }
   })
   check('只读来源的更新被拒', readonly.status === 403 && readonly.body.code === 'readonly-source', `${String(readonly.status)} ${String(readonly.body.code)}`)
+
+  // 把创建器收起来：它留在那里会挡住下方的菜单，后面的场景就点不动了。
+  // 源码面板的关闭按钮只回到表单模式；写成功之后它自己就收起来了。
+  const sourcePanel = page.locator('[data-dsh-widget-board-source-close]')
+  if (await sourcePanel.count() > 0) await sourcePanel.click()
+  await page.waitForSelector('[data-dsh-widget-board-composer-close]', { timeout: 10000 })
+  await page.locator('[data-dsh-widget-board-composer-close]').click()
+  // 有未保存的内容时它会先问一次：放弃修改。
+  const discarding = await page.locator('[data-dsh-widget-board-composer-discard]').count()
+  if (discarding > 0) await page.locator('[data-dsh-widget-board-composer-discard]').click()
+  const closed = await waitFor(async () => await page.locator('[data-dsh-widget-board-composer]').count() === 0, 10000)
+  check('关掉源码面板之后创建器也收起来了', closed)
 }
 
 module.exports = { sourcePass, openSource }

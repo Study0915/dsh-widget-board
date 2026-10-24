@@ -184,11 +184,17 @@ export function shareRoutes(context: RouteContext): Route[] {
           throw new Refusal(400, (error as Error).message)
         }
         const hash = contentHash(new Map(unpacked.files.map((file) => [file.path, Buffer.from(file.content)])))
-        const existing = routes.records.get(unpacked.manifest.id)
+        const id = unpacked.manifest.id
+        const existing = routes.records.get(id)
+        // 来源保护先于别的判定：内置与插件提供的组件谁也不能用导入覆盖，哪怕内容一模一样
+        // （技术契约 4）。
+        if (existing !== undefined && existing.source !== 'user') {
+          throw new Refusal(403, `${id} 是${existing.source === 'builtin' ? '内置' : '插件提供'}的组件，不能覆盖；换一个 id 再导入`, { code: 'readonly-source' })
+        }
         if (existing !== undefined && existing.hash !== hash && !replace) {
-          throw new Refusal(409, `${unpacked.manifest.id} 已经在组件库里，内容不一样；带上 replace=true 才会覆盖`, {
+          throw new Refusal(409, `${id} 已经在组件库里，内容不一样；带上 replace=true 才会覆盖`, {
             code: 'widget-conflict',
-            id: unpacked.manifest.id,
+            id,
             current: existing.hash,
             incoming: hash,
           })
@@ -196,13 +202,13 @@ export function shareRoutes(context: RouteContext): Route[] {
         // 同 id 同内容时按「已经是这一份」处理：不必重写目录，也免掉一次并发核对。
         if (existing !== undefined && existing.hash === hash) {
           response.writeHead(201, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
-          response.end(JSON.stringify({ ok: true, entry: entryOf(routes, unpacked.manifest.id, hash) }))
+          response.end(JSON.stringify({ ok: true, entry: entryOf(routes, id, hash) }))
           return
         }
-        await install(routes, unpacked.manifest.id, unpacked.files, existing?.hash)
+        await install(routes, id, unpacked.files, existing?.hash)
         await routes.refresh()
         response.writeHead(201, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
-        response.end(JSON.stringify({ ok: true, entry: entryOf(routes, unpacked.manifest.id, hash) }))
+        response.end(JSON.stringify({ ok: true, entry: entryOf(routes, id, hash) }))
       },
     },
     {

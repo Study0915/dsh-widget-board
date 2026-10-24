@@ -176,6 +176,17 @@ describe('组件包的导出与导入', () => {
     expect(response.status).toBe(400)
     expect(response.body.toString('utf8')).toMatch(/不是有效的组件包/)
   })
+
+  it('内置组件的包内容一样也不许装进用户目录', async () => {
+    // 这一条曾经被「同哈希就跳过」那条短路放过去：内置那份的包能装出一个同名的用户目录。
+    const builtin = { ...record('demo'), source: 'builtin' as const }
+    const test = await harness([builtin])
+    const incoming = await harness([record('demo')])
+    const exported = await incoming.send('GET', '/library/widget/demo/export')
+    const response = await test.send('POST', '/library/import', new Uint8Array(exported.body))
+    expect(response.status).toBe(403)
+    expect(response.body.toString('utf8')).toMatch(/不能覆盖/)
+  })
 })
 
 describe('看板包的导出与导入', () => {
