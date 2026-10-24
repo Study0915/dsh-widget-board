@@ -8,11 +8,11 @@
  * 出来并验证，最后用同父目录的暂存→验证→交换替换旧目录。旧版本在交换之后才清理：读库时看到的是
  * 完整的一份，不是半写的（D5）。
  */
-import { mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { WidgetManifest, WidgetRoot, WidgetSource } from '@dsh-widget-board/contracts'
 import { isRecord } from '../guards'
-import { contentHash, manifestProblem, readWidget } from '../library'
+import { contentHash, manifestProblem, readWidget, writeTree } from '../library'
 import type { WidgetRecord } from '../library'
 import { Refusal } from '../refusal'
 
@@ -148,21 +148,6 @@ function filesOf(manifest: WidgetManifest, files: readonly WidgetFileInput[]): {
     seen.add(file.path)
   }
   return all
-}
-
-/**
- * 把一组文件整个写出来：先建目录，再逐份写。
- *
- * @param dir - 组件目录的绝对路径。
- * @param files - 相对路径与内容。
- */
-async function writeTree(dir: string, files: readonly { path: string, content: Buffer }[]): Promise<void> {
-  await mkdir(dir, { recursive: true })
-  for (const file of files) {
-    const target = join(dir, file.path)
-    await mkdir(dirname(target), { recursive: true })
-    await writeFile(target, file.content)
-  }
 }
 
 /**

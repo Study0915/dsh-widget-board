@@ -7,6 +7,7 @@
  */
 import { readJson } from '../body'
 import { isRecord } from '../guards'
+import { recordOf } from '../library'
 import { Refusal } from '../refusal'
 import { json } from '../response'
 import type { Route, RouteContext } from '../routes'
@@ -47,9 +48,7 @@ export function sourceRoutes(context: RouteContext): Route[] {
       limit: 0,
       async handle(_context, _request, response, match) {
         const id = decodeURIComponent(match[1] as string)
-        const record = context.records.get(id)
-        if (record === undefined) throw new Refusal(404, `组件库里没有可用的组件 ${id}`)
-        json(response, 200, sourceModelOf(record, context.roots))
+        json(response, 200, sourceModelOf(recordOf(context.records, id), context.roots))
       },
     },
     {

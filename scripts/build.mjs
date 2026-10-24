@@ -59,8 +59,30 @@ window.__ModuleLoader__.load({
   id: ${JSON.stringify(PACKAGE.name)},
   factory: (require) => {
     var module = { exports: {} }
-    var exports = module.exports`
+    var exports = module.exports
+    // 加载器给的 require 带一个 async：按需加载的分包经它去取（源码编辑器那一份，D2）。
+    // 加载器不把这个 require 交给插件的 apply，只能在工厂执行时记下来。
+    globalThis.__dshWidgetBoardRequire = require`
 const FACTORY_CLOSE = `    return module.exports
+  },
+})`
+
+/**
+ * 一个按需加载的分包的包装：源码面板进入高级模式时才去取它。
+ *
+ * 宿主的加载器按 `chunk` 认领这个工厂，文件名要与 `require.async` 里写的一致（D2）。
+ */
+const CHUNK_OPEN = `/**
+ * ${PACKAGE.name} — 按需加载的源码编辑器
+ * GENERATED FILE — 不要编辑。源码在 packages/client/src/composer/，由 \`npm run build\` 打包。
+ */
+window.__ModuleLoader__.load({
+  id: ${JSON.stringify(PACKAGE.name)},
+  chunk: ${JSON.stringify('client.source-editor.js')},
+  factory: (require) => {
+    var module = { exports: {} }
+    var exports = module.exports`
+const CHUNK_CLOSE = `    return module.exports
   },
 })`
 
@@ -152,6 +174,33 @@ async function buildClientHalf() {
   }, '.js')
   checkClientBoundary(code)
   writeAtomic(path.join(LIB, 'client.js'), code)
+  return Buffer.byteLength(code)
+}
+
+/**
+ * 源码编辑器这一个按需加载的分包。
+ *
+ * CodeMirror 有几百 KB，而绝大多数人不会进高级模式：它单独打成一个分包，源码面板第一次打开
+ * 高级模式时才去取（D2 的分包原则，与精选库同一套做法）。
+ *
+ * @returns 分包的字节数。
+ */
+async function buildClientChunk() {
+  const code = await output({
+    entryPoints: [path.join(ROOT, 'packages', 'client', 'src', 'composer', 'source-editor-chunk.ts')],
+    outfile: path.join(LIB, 'client.source-editor.js'),
+    bundle: true,
+    format: 'cjs',
+    platform: 'browser',
+    target: 'esnext',
+    minify: true,
+    sourcemap: 'linked',
+    jsx: 'automatic',
+    loader: { '.css': 'text' },
+    banner: { js: CHUNK_OPEN },
+    footer: { js: CHUNK_CLOSE },
+  }, '.js')
+  writeAtomic(path.join(LIB, 'client.source-editor.js'), code)
   return Buffer.byteLength(code)
 }
 
@@ -256,8 +305,9 @@ fs.rmSync(LIB, { recursive: true, force: true })
 fs.mkdirSync(LIB, { recursive: true })
 emitServiceTypes()
 const client = await buildClientHalf()
+const chunk = await buildClientChunk()
 const host = await buildHostHalf()
 const runtime = await buildRuntime()
 writeAssets()
 const libs = await buildLibs()
-console.log(`build: lib/client.js ${client} 字节，lib/host/index.js ${host} 字节，lib/runtime/runtime.js ${runtime} 字节，精选库 ${Object.entries(libs).map(([id, size]) => `${id} ${size}`).join('，')} 字节，内置组件已就位，服务类型入口已写出`)
+console.log(`build: lib/client.js ${client} 字节，lib/client.source-editor.js ${chunk} 字节，lib/host/index.js ${host} 字节，lib/runtime/runtime.js ${runtime} 字节，精选库 ${Object.entries(libs).map(([id, size]) => `${id} ${size}`).join('，')} 字节，内置组件已就位，服务类型入口已写出`)

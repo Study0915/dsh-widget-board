@@ -107,6 +107,8 @@ interface FailureBody {
   subject?: ContentIssueSubject
   revision?: number
   snapshot?: unknown
+  /** 组件类型冲突时宿主给的当前版本哈希。 */
+  current?: string
 }
 
 /**
