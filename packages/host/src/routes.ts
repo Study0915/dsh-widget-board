@@ -59,7 +59,7 @@ import { Refusal } from './refusal'
 import { shareRoutes } from './share'
 import type { SelfChecks } from './selfcheck'
 import { selfCheckRoutes } from './selfcheck'
-import { StaleRevisionError, isArrangement, withBoardArrangement, withBoardLayouts, withGroupAdded, withGroupRemoved, withInstanceAdded, withInstanceData, withInstanceRemoved, withInstanceStateChecked } from './state'
+import { StaleRevisionError, arrangementUnitOf, defaultBoxOf, groupUnitOf, isArrangement, withArrangementUnits, withBoardArrangement, withBoardLayouts, withGroupAdded, withGroupRemoved, withInstanceAdded, withInstanceData, withInstanceRemoved, withInstanceStateChecked } from './state'
 import type { RateLimiter } from './limits'
 import type { SaveOptions, Workspace } from './workspace'
 
@@ -301,7 +301,12 @@ const ROUTES: Route[] = [
         let saved: Record<string, CardLayout> = {}
         const next = await context.workspace.save(
           id,
-          (current) => withBoardLayouts(current, layouts, (widget) => context.records.get(widget)?.manifest.minBox),
+          (current) => {
+            // 自由坐标只属于自由模式：看板已经换成整齐行列时，过时的自由提交整体退回，
+            // 让页面按当前快照重画，避免两种客户端互相覆盖（D29、技术契约2）。
+            if (current.arrangement?.mode === 'aligned') throw new StaleRevisionError(body.layoutRevision, current.layoutRevision)
+            return withBoardLayouts(current, layouts, (widget) => context.records.get(widget)?.manifest.minBox)
+          },
           {
             expectedLayoutRevision: body.layoutRevision,
             layoutChanged: true,
@@ -382,7 +387,9 @@ const ROUTES: Route[] = [
         ...(wanted.props === undefined ? {} : { props: wanted.props }),
         ...(wanted.layout === undefined ? {} : { layout: wanted.layout }),
       }
-      await context.workspace.save(boardId, (current) => withInstanceAdded(current, record, options, id).board, {
+      // 排列单元的初始盒子来自组件的 defaultBox；整齐模式的新卡接在顺序末尾（D29）。
+      const box = defaultBoxOf(record)
+      await context.workspace.save(boardId, (current) => withArrangementUnits(withInstanceAdded(current, record, options, id).board, [], [{ id, box }]), {
         layoutChanged: true,
         event: () => ({ type: 'board' }),
       })
@@ -423,7 +430,8 @@ const ROUTES: Route[] = [
       await context.workspace.save(boardId, (current) => {
         const added = withGroupAdded(current, front, back, wanted.layout === undefined ? {} : { layout: wanted.layout })
         id = added.id
-        return added.board
+        // 组在整齐偏好里占一格，单元 id 是正面实例的 id（D29）；盒子取落点或组默认。
+        return withArrangementUnits(added.board, [], groupUnitOf(added.board, id))
       }, { layoutChanged: true, event: () => ({ type: 'board' }) })
       json(response, 201, { id, snapshot: workspaceSnapshot(context) })
     },
@@ -438,7 +446,8 @@ const ROUTES: Route[] = [
       const wanted = body as unknown as GroupRemoveRequest
       const board = context.workspace.findGroup(wanted.group)
       if (board === undefined) throw new Refusal(404, `看板上没有这一组：${wanted.group}`)
-      await context.workspace.save(board.id, (current) => withGroupRemoved(current, wanted.group), { layoutChanged: true, event: () => ({ type: 'board' }) })
+      // 整组离开时它的排列单元一起离开（D29）。
+      await context.workspace.save(board.id, (current) => withArrangementUnits(withGroupRemoved(current, wanted.group), [arrangementUnitOf(current, current.instances.find((instance) => instance.group?.id === wanted.group) as BoardInstance)], []), { layoutChanged: true, event: () => ({ type: 'board' }) })
       json(response, 200, workspaceSnapshot(context))
     },
   },
@@ -573,7 +582,11 @@ const ROUTES: Route[] = [
       const id = decodeURIComponent(match[1] as string)
       const { board } = locate(context, id)
       await readJson(request, EMPTY_LIMIT)
-      await context.workspace.save(board.id, (current) => withInstanceRemoved(current, id), { layoutChanged: true, event: () => ({ type: 'board' }) })
+      // 这张卡代表的排列单元（组卡是整组）一起离开（D29）。
+      await context.workspace.save(board.id, (current) => {
+        const unit = arrangementUnitOf(current, current.instances.find((instance) => instance.id === id) as BoardInstance)
+        return withArrangementUnits(withInstanceRemoved(current, id), [unit], [])
+      }, { layoutChanged: true, event: () => ({ type: 'board' }) })
       json(response, 200, workspaceSnapshot(context))
     },
   },
