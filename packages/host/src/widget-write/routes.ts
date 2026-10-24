@@ -62,7 +62,7 @@ export function sourceRoutes(context: RouteContext): Route[] {
         const expectedHash = typeof body.expectedHash === 'string' && body.expectedHash !== '' ? body.expectedHash : undefined
         const written = await writeWidgetType({
           roots: context.roots,
-          records: context.records,
+          records: () => context.records,
           request: {
             id: body.id,
             manifest: body.manifest,

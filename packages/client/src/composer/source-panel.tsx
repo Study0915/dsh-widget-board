@@ -14,6 +14,7 @@ import { t } from '../copy'
 import type { ShellTheme } from '../theme'
 import { defineWidget, fetchWidgetSource, SourceConflictError } from './source-api'
 import { suggestedIdOf } from './source-rules'
+import { isRecord } from './schema'
 import { loadSourceEditor } from './source-editor-loader'
 import type { SourceEditor } from './source-editor-loader'
 
@@ -145,7 +146,9 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
     setSaving(true)
     setError(null)
     try {
-      const manifest = JSON.parse(files['widget.json'] ?? '{}') as unknown
+      const parsed = JSON.parse(files['widget.json'] ?? '{}') as unknown
+      // manifest 的 id 要与目录名一致（C4）：另存时它跟着目标 id 一起改，就地改时不动。
+      const manifest = isRecord(parsed) ? { ...parsed, id: targetId } : parsed
       const rest: Record<string, string> = {}
       for (const [path, text] of Object.entries(files)) {
         if (path === 'widget.json') continue
