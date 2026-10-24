@@ -13,6 +13,7 @@ import type { WidgetSourceModel } from '@dsh-widget-board/contracts'
 import { t } from '../copy'
 import type { ShellTheme } from '../theme'
 import { defineWidget, fetchWidgetSource, SourceConflictError } from './source-api'
+import { suggestedIdOf } from './source-rules'
 import { loadSourceEditor } from './source-editor-loader'
 import type { SourceEditor } from './source-editor-loader'
 
@@ -81,7 +82,8 @@ export function SourceEditorPanel({ widgetId, theme, onSaved, onFilesChanged, on
     fetchWidgetSource(widgetId).then((next) => {
       if (!live) return
       setModel(next)
-      setTargetId(next.writable ? next.id : next.suggestedId ?? `user-${next.id}`)
+      // 宿主给的建议 id 优先：它才是真正写盘的那一份判定（C4）。
+      setTargetId(next.writable ? next.id : next.suggestedId ?? suggestedIdOf(next.id, next.source))
       setFiles({ 'widget.json': next.manifest, ...next.files })
       setActive(next.files['index.html'] === undefined ? 'widget.json' : 'index.html')
     }, (caught: Error) => {

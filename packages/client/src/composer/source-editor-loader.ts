@@ -8,6 +8,9 @@
  */
 import type { EditorFileKind, SourceEditor } from './source-editor'
 
+export { languageOf } from './editor-language'
+export type { EditorFileKind, SourceEditor }
+
 /** 这个分包的文件名：与构建脚本和宿主的加载器约定一致。 */
 const CHUNK = './client.source-editor.js'
 
@@ -31,7 +34,9 @@ function loaderRequire(): AsyncRequire | null {
   return typeof value === 'function' ? value as AsyncRequire : null
 }
 
-/** 分包已经取过一次时的结果。 */
+/**
+ * 分包已经取过一次时的结果。
+ */
 let loaded: typeof import('./source-editor') | null = null
 
 /** 正在取的那一次：并发打开源码面板时只取一遍。 */
@@ -69,8 +74,3 @@ export async function loadSourceEditor(): Promise<typeof import('./source-editor
   }
   return await pending
 }
-
-/**
- * 分包里的那些类型在这里再写一遍：主包不导入 CodeMirror，类型只靠这份声明。
- */
-export type { EditorFileKind, SourceEditor }
