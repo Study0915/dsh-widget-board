@@ -1,6 +1,6 @@
 # 当前交付状态
 
-更新日：2026-10-23，Asia/Shanghai。
+更新日：2026-10-24，Asia/Shanghai。
 
 ## 本轮范围
 
@@ -19,8 +19,9 @@
 | 局部hooks与保护脚本 | 已配置；31/31自检通过 |
 | 文档本地commit及push | 首次提交2851bd6已推送到fork文档分支，后续交付修订同分支保存 |
 | 产品实现T00—T02 | 已完成，证据在`.debug/local-review/T00`至`T02` |
-| 产品实现T03 | 已完成，证据在`.debug/local-review/T03`；commit `7145a31`，分支`feat/card-composer`已推送fork |
-| 产品实现T04—T08 | 未开始 |
+| 产品实现T03 | 实现与字体留白修正已推送fork；最新产品提交 `73411a4`，分支`feat/card-composer`；完成关卡以`.debug/local-review/T03`最新收据为准 |
+| 产品实现T04 | 用户交由 DSH 实施；本轮 T03 结束前已确认暂停，后续继续同一分支 |
+| 产品实现T05—T08 | 未开始 |
 
 已运行原项目不依赖安装的ADR索引、CHANGELOG、AGENTS命令表检查，均通过；原作者AGENTS、产品源码与锁文件保持原版。截图副本在.debug/references，不纳入公开提交。
 
@@ -34,4 +35,4 @@
 
 ## 下一步
 
-T04（源码、草稿与真实预览）在`feat/card-composer`上继续；T03的完成关卡只覆盖C01—C07与V01、V02，用户对浅深色截图的目视核对仍未完成。日常阶段版本允许向fork任务分支commit/push；上游投稿等待以后明确指令。
+T04（源码、草稿与真实预览）由 DSH 在`feat/card-composer`上继续，恢复前先重读最新源码和 guard 状态。T03的完成关卡只覆盖C01—C07与V01、V02；用户已在2026-10-24确认接受本轮浅深色排版。六张有效新截图及目视观察记录在`.debug/evidence/T03/spacing/`，未重新执行的主题、桌面和其他尺寸检查已在观察记录与审阅记录中列明。日常阶段版本允许向fork任务分支commit/push；上游投稿等待以后明确指令。
