@@ -9,16 +9,16 @@
  * 同 id 不同内容的导入不静默覆盖：先回 409 并带上两边的哈希，调用方带 `replace=true` 再来一次才会
  * 覆盖。内置与插件提供的组件不允许被覆盖——它们不落在用户目录里（D17）。
  */
-import { join } from 'node:path'
 import type { BoardInstance, WidgetLibraryEntry } from '@dsh-widget-board/contracts'
 import { readBody } from './body'
-import { contentHash, writeWidgetDirectory } from './library'
+import { contentHash } from './library'
 import type { WidgetRecord } from './library'
 import type { BoardPackageCard, BoardPackageWidget } from './package'
 import { PACKAGE_MAX_COMPRESSED_BYTES, packBoard, packWidget, unpackBoard, unpackWidget } from './package'
 import { Refusal } from './refusal'
 import type { Route, RouteContext } from './routes'
 import { instanceOf } from './state'
+import { writeWidgetType } from './widget-write/write'
 
 /** 导入时最多读多少字节。 */
 const IMPORT_LIMIT = PACKAGE_MAX_COMPRESSED_BYTES
@@ -38,21 +38,44 @@ function embeddedOf(record: WidgetRecord): BoardPackageWidget {
 }
 
 /**
- * 写一个组件的目录；同 id 的旧版本先由 `writeWidgetDirectory` 清掉。
+ * 写一个组件的目录；同 id 的旧版本先由共享写入服务换掉。
+ *
+ * 来源保护与并发核对都在共享的写入服务里（技术契约 4）：导入与工具、界面写组件走同一条路，不会
+ * 各自写一套检查。
  *
  * @param context - 路由上下文。
  * @param id - 组件 id。
  * @param files - 相对路径与内容。
+ * @param expectedHash - 更新时读到的版本哈希；导入没有这一份，省略时按「新建」处理。
  * @throws {Refusal} 没有可写的用户目录，或来源不允许覆盖。
  */
-async function install(context: RouteContext, id: string, files: readonly { path: string, content: Uint8Array }[]): Promise<void> {
+async function install(
+  context: RouteContext,
+  id: string,
+  files: readonly { path: string, content: Uint8Array }[],
+  expectedHash?: string,
+): Promise<void> {
   const existing = context.records.get(id)
   if (existing !== undefined && existing.source !== 'user') {
-    throw new Refusal(400, `${id} 是${existing.source === 'builtin' ? '内置' : '插件提供'}的组件，不能覆盖；换一个 id 再导入`)
+    throw new Refusal(403, `${id} 是${existing.source === 'builtin' ? '内置' : '插件提供'}的组件，不能覆盖；换一个 id 再导入`, { code: 'readonly-source' })
   }
-  const root = context.roots.find((candidate) => candidate.source === 'user')
-  if (root === undefined) throw new Refusal(500, '没有可写的用户组件目录')
-  await writeWidgetDirectory(join(root.dir, id), files)
+  const manifestFile = files.find((file) => file.path === 'widget.json')
+  if (manifestFile === undefined) throw new Refusal(400, '组件包里没有 widget.json（D7）')
+  const manifest = JSON.parse(Buffer.from(manifestFile.content).toString('utf8')) as unknown
+  const rest = files
+    .filter((file) => file.path !== 'widget.json')
+    .map((file) => ({ path: file.path, content: Buffer.from(file.content).toString('utf8') }))
+  await writeWidgetType({
+    roots: context.roots,
+    records: context.records,
+    request: {
+      id,
+      manifest,
+      files: rest,
+      ...(expectedHash === undefined ? {} : { expectedHash }),
+    },
+    reload: context.refresh,
+  })
 }
 
 /** 一个组件在界面上的样子；刚装上、重读还没跟上时给出最小的那一份。 */
@@ -84,7 +107,7 @@ async function importWidgets(context: RouteContext, widgets: readonly BoardPacka
       })
     }
     const files = Object.entries(widget.files).map(([path, content]) => ({ path, content: new Uint8Array(Buffer.from(content, 'base64')) }))
-    await install(context, widget.manifest.id, files)
+    await install(context, widget.manifest.id, files, existing?.hash)
     installed += 1
   }
   if (installed > 0) await context.refresh()
@@ -170,7 +193,13 @@ export function shareRoutes(context: RouteContext): Route[] {
             incoming: hash,
           })
         }
-        await install(routes, unpacked.manifest.id, unpacked.files)
+        // 同 id 同内容时按「已经是这一份」处理：不必重写目录，也免掉一次并发核对。
+        if (existing !== undefined && existing.hash === hash) {
+          response.writeHead(201, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+          response.end(JSON.stringify({ ok: true, entry: entryOf(routes, unpacked.manifest.id, hash) }))
+          return
+        }
+        await install(routes, unpacked.manifest.id, unpacked.files, existing?.hash)
         await routes.refresh()
         response.writeHead(201, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
         response.end(JSON.stringify({ ok: true, entry: entryOf(routes, unpacked.manifest.id, hash) }))

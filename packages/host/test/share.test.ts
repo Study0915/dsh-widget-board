@@ -165,7 +165,8 @@ describe('组件包的导出与导入', () => {
     await writeWidgetDirectory(join(test.dir, 'unused'), [])
     const exported = await incoming.send('GET', '/library/widget/demo/export')
     const response = await test.send('POST', '/library/import?replace=true', new Uint8Array(exported.body))
-    expect(response.status).toBe(400)
+    // 技术契约 4：user 之外的来源更新回 403，不与 409 的并发冲突混在一起。
+    expect(response.status).toBe(403)
     expect(response.body.toString('utf8')).toMatch(/不能覆盖/)
   })
 

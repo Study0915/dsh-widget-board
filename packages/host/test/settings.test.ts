@@ -26,6 +26,9 @@ import { createRegistries } from '../src/sources'
 import type { Registries } from '../src/sources'
 import { writeBoard } from '../src/state'
 import { openWorkspace } from '../src/workspace'
+import { createRequestLog } from '../src/request-log'
+import { openDrafts } from '../src/drafts/store'
+import { createPreviews } from '../src/preview/store'
 
 const ROOT = fileURLToPath(new URL('../../..', import.meta.url))
 
@@ -221,6 +224,9 @@ async function harness(options: {
     refresh: async () => undefined,
     sources,
     grants: memoryGrants(),
+    requests: createRequestLog(),
+    drafts: openDrafts(join(home, 'drafts')),
+    previews: createPreviews(),
     ...(options.credentials === undefined ? {} : { credentials: () => options.credentials }),
   }
   const handler = createHandler(context)
