@@ -365,6 +365,20 @@ describe('写一个用户组件类型', () => {
     expect(response.status).toBe(400)
     expect(response.body).toMatch(/不一致/)
   })
+
+  it('只读源的包导进来时也回 403：内容一样也不行', async () => {
+    // 这一条曾经被「同哈希就跳过」那条短路放过去：内置组件的包能装进用户目录，
+    // 装出来的目录名与内置那份重名（D17）。
+    const test = await harness([], ['clock'])
+    const response = await test.send('POST', '/library/define', {
+      id: 'clock',
+      manifest: { id: 'clock', title: { zh: 'clock', en: 'clock' }, version: '0.1.0', sizes: ['s'] },
+      files: { 'index.html': '<p>hi</p>', 'style.css': 'p{}' },
+      expectedHash: 'b'.repeat(64),
+    })
+    expect(response.status).toBe(403)
+    expect(response.body).toMatch(/不能就地改/)
+  })
 })
 
 describe('草稿', () => {
