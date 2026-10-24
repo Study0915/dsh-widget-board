@@ -181,13 +181,51 @@ export const boardInstancePath = (id: string): string => boardPath(id, INSTANCE_
 /** 创建一张完整卡片的地址，文档相对（技术契约 3）。 */
 export const boardComposePath = (id: string): string => boardPath(id, COMPOSE_ROUTE)
 
-/**
- * 一个组件的表单模型地址，文档相对（技术契约 3）：创建器按它画表单。
+/** 一个组件的表单模型地址，文档相对（技术契约 3）：创建器按它画表单。
  *
  * @param id - 组件 id。
  * @returns 读表单模型的路径。
  */
 export const libraryFormPath = (id: string): string => `${CLIENT_ROUTE}/library/${encodeURIComponent(id)}/form`
+
+/**
+ * 一个组件类型的源码地址，文档相对（技术契约 4）：高级模式按它读文件。
+ *
+ * @param id - 组件 id。
+ * @returns 读源码的路径。
+ */
+export const librarySourcePath = (id: string): string => `${CLIENT_ROUTE}/library/${encodeURIComponent(id)}/source`
+
+/** 写下一个用户组件类型的地址，文档相对（技术契约 4）。 */
+export const libraryDefinePath = (): string => `${CLIENT_ROUTE}/library/define`
+
+/** 草稿的地址前缀，文档相对（技术契约 4）。 */
+export const DRAFTS_ROUTE = '/drafts'
+
+/** 草稿列表的地址，文档相对（技术契约 4）。 */
+export const draftsPath = (): string => `${CLIENT_ROUTE}${DRAFTS_ROUTE}`
+
+/**
+ * 一份草稿的地址，文档相对（技术契约 4）。
+ *
+ * @param id - 草稿 id。
+ * @returns 这一份草稿的路径。
+ */
+export const draftPath = (id: string): string => `${CLIENT_ROUTE}${DRAFTS_ROUTE}/${encodeURIComponent(id)}`
+
+/** 预览的地址前缀，文档相对（技术契约 5）。 */
+export const PREVIEW_ROUTE = '/preview'
+
+/** 新建预览会话的地址，文档相对（技术契约 5）。 */
+export const previewPath = (): string => `${CLIENT_ROUTE}${PREVIEW_ROUTE}`
+
+/**
+ * 预览文档的地址，文档相对（技术契约 5）。
+ *
+ * @param id - 预览会话 id。
+ * @returns 预览文档的路径。
+ */
+export const previewDocumentPath = (id: string): string => `${CLIENT_ROUTE}${PREVIEW_ROUTE}/${encodeURIComponent(id)}/document`
 
 /**
  * 一张卡内容的地址，文档相对（技术契约 3）。
