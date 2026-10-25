@@ -43,7 +43,7 @@
   overflow: hidden;
   color: var(--w-color-fg, #0b1016);
   font-size: var(--w-type-body, 14px);
-  line-height: 20px;
+  line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -59,7 +59,8 @@
 }
 
 .links-card__note {
-  max-width: 40%;
+  max-width: 8em;
+  min-width: 0;
   overflow: hidden;
   color: var(--w-color-muted, #6b7684);
   font-size: var(--w-type-caption, 12px);
