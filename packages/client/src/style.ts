@@ -1,4 +1,5 @@
 import { PACKAGE_NAME } from '@dsh-widget-board/contracts'
+import visual from './visual.css'
 import badge from './badge.css'
 import board from './board.css'
 import management from './board-management/management.css'
@@ -25,7 +26,7 @@ export function mountStyle(): () => void {
   const element = document.createElement('style')
   element.dataset.plugin = PACKAGE_NAME
   element.dataset.pluginCss = 'widget-board'
-  element.textContent = sheet
+  element.textContent = `${sheet}\n${visual}`
   document.head.append(element)
   return () => element.remove()
 }
