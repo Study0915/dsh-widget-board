@@ -139,7 +139,9 @@ async function start(options = {}) {
     detached: process.platform !== 'win32',
   })
   const stop = () => {
-    fs.writeFileSync(path.join(home, 'host-test.log'), log.replace(/([?&]token=)[^\s"']+/g, '$1<redacted>'))
+    const logs = path.join(ROOT, '.debug', 'host-logs')
+    fs.mkdirSync(logs, { recursive: true })
+    fs.writeFileSync(path.join(logs, `${path.basename(home)}.log`), log.replace(/([?&]token=)[^\s"']+/g, '$1<redacted>') + `\n[test-host] exitCode=${child.exitCode} signal=${child.signalCode}\n`)
     if (child.exitCode !== null || child.signalCode !== null) return
     if (process.platform === 'win32') {
       spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' })
