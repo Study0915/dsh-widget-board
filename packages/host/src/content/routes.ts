@@ -26,6 +26,14 @@ import type { Route, RouteContext } from '../routes'
 import { isCardLayout } from '@dsh-widget-board/model'
 import { instanceOf, stateBytes, withInstancePatched } from '../state'
 import { checkContentBudget, contentIssues, handshakeBytes } from './validate'
+import { mediaOf } from '../media/routes'
+import type { MediaBinding, InstanceMedia } from '@dsh-widget-board/contracts'
+
+/** 没有媒体修改时兼容现有宿主与调用；有修改时必须使用受限存储事务。 */
+async function bindMedia<T>(context: RouteContext, target: string, binding: MediaBinding, save: (media: InstanceMedia | undefined) => Promise<T>): Promise<T> {
+  if (binding.media === undefined) return await save(context.workspace.findInstance(target)?.instance.media)
+  return await mediaOf(context).bind(target, binding, save)
+}
 
 /** 创建与编辑的请求体上限（技术契约 3）：一整张卡的内容，比单次状态写入大。 */
 export const CONTENT_LIMIT = 128 * 1024
@@ -142,14 +150,14 @@ export function contentRoutes(context: RouteContext): Route[] {
         })
         // 整张卡一次写进去：内容与状态都已经校验，写入失败时磁盘上还是原来那一份（D5）。
         const id = randomUUID()
-        await context.workspace.save(boardId, (current) => {
+        await bindMedia(context, `board:${boardId}`, wanted, async media => await context.workspace.save(boardId, (current) => {
           const added = instanceOf(record, current.instances, {
             props: content.props ?? {},
             ...(wanted.layout === undefined ? {} : { layout: wanted.layout }),
           })
-          const composed: BoardInstance = { ...added, id, data: content.data ?? null, state: content.state ?? null }
+          const composed: BoardInstance = { ...added, id, data: content.data ?? null, state: content.state ?? null, ...(media === undefined ? {} : { media }) }
           return { ...current, instances: [...current.instances, composed] }
-        }, { layoutChanged: true, event: () => ({ type: 'board' }) })
+        }, { layoutChanged: true, event: () => ({ type: 'board' }) }))
         json(response, 201, { id, snapshot: workspaceSnapshot(context) })
       },
     },
@@ -167,7 +175,7 @@ export function contentRoutes(context: RouteContext): Route[] {
         if (!Number.isSafeInteger(wanted.expectedRevision) || wanted.expectedRevision < 0) {
           throw new Refusal(400, '内容写入要带上读到的 expectedRevision')
         }
-        if (wanted.props === undefined && !('data' in wanted) && !('state' in wanted)) {
+        if (wanted.props === undefined && !('data' in wanted) && !('state' in wanted) && wanted.media === undefined) {
           throw new Refusal(400, '这次内容写入没有要改的项')
         }
         const content = settle(record.manifest, wanted)
@@ -185,7 +193,7 @@ export function contentRoutes(context: RouteContext): Route[] {
         })
         // 修订号在看板写入队列里再核对一次：这里读到之后，别的窗口仍可能先写进去。
         try {
-          await context.workspace.save(found.board.id, (current) => {
+          await bindMedia(context, id, wanted, async media => await context.workspace.save(found.board.id, (current) => {
             if (current.revision !== wanted.expectedRevision) {
               throw new ContentStaleError(wanted.expectedRevision, current.revision)
             }
@@ -198,16 +206,16 @@ export function contentRoutes(context: RouteContext): Route[] {
             const instances = 'state' in wanted
               ? changed.instances.map((instance) => instance.id === id ? { ...instance, state: content.state } : instance)
               : changed.instances
-            return { ...changed, instances }
+            return { ...changed, instances: instances.map(instance => instance.id === id && media !== undefined ? { ...instance, media } : instance) }
           }, {
             event: () => ({
-              type: 'instance',
+              type: wanted.media === undefined ? 'instance' : 'board',
               id,
               ...(wanted.props === undefined ? {} : { props: content.props }),
               ...('data' in wanted ? { data: content.data } : {}),
               ...('state' in wanted ? { state: content.state } : {}),
             }),
-          })
+          }))
         } catch (error) {
           if (error instanceof ContentStaleError) {
             json(response, 409, { error: error.message, code: 'stale-revision', revision: error.actual, snapshot: workspaceSnapshot(context) })
@@ -221,6 +229,7 @@ export function contentRoutes(context: RouteContext): Route[] {
           props: saved?.instance.props ?? content.props,
           data: saved?.instance.data ?? null,
           state: saved?.instance.state ?? null,
+          ...(saved?.instance.media === undefined ? {} : { media: saved.instance.media }),
         })
       },
     },

@@ -7,7 +7,7 @@
 import type { LocalizedText } from '@dsh-widget-board/contracts'
 
 /** 模板的键；顺序就是界面上的顺序（C02）。 */
-export const TEMPLATE_KEYS = ['text', 'todo', 'links', 'countdown', 'advanced'] as const
+export const TEMPLATE_KEYS = ['text', 'todo', 'links', 'countdown', 'image', 'advanced'] as const
 
 /** 一个模板。 */
 export type TemplateKey = (typeof TEMPLATE_KEYS)[number]
@@ -77,6 +77,14 @@ export const TEMPLATES: readonly Template[] = [
     hint: { zh: '离某个日期还有多久', en: 'How long until a date' },
     seed: { props: {}, data: null, state: null },
     sections: ['props'],
+  },
+  {
+    key: 'image',
+    widget: 'image',
+    title: { zh: '图片', en: 'Image' },
+    hint: { zh: '本地图片、说明与焦点位置', en: 'Local image, caption and focal point' },
+    seed: { props: { focusX: 50, focusY: 50 }, data: { alt: '', caption: '' }, state: null },
+    sections: ['props', 'data'],
   },
   {
     key: 'advanced',

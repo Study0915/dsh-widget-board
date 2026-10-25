@@ -16,6 +16,7 @@
 - 组件可以把链接交给宿主打开：`widget.open(url)` 发一条桥消息，由宿主页面在新标签页里开出这一页，协议只限 http 与 https。沙箱仍然不给导航与弹窗，组件拿到的只是「请宿主开一个网页」这一件事；会话里内联显示的卡片同样可用。
 - 新增内置组件「日期倒计时」：名称、日期、时刻、全天、时区与一行备注，读成距目标还有几天几时几分，到点之后改成已经过去的说法。目标时刻按指定时区的墙上时间换算，换算只借 `Intl.DateTimeFormat`，不引时区表；时区名读不出来时退回本地时区并在卡片上说明。分钟精度，每 15 秒重算一次，暂停时停掉计时器。
 - 新增按需加载的源码编辑器、独立草稿和真实沙箱预览。源码默认另存为独立用户组件，可保留当前卡片的内容与布局；明确选择更新全部实例后按 expectedHash 检查并发。组件写入、工具和导入共用来源保护与目录交换，二进制资源保持原字节。预览只更新局部状态，拒绝正式动作、能力调用和通知，并在关闭或过期时释放。
+- 创建器支持本地图片：受限解码、静态 WebP、按实例归属的分块读取与完整看板媒体备份；旧看板包继续可读。
 
 ### 体验优化
 
@@ -39,6 +40,7 @@
 - Widgets can hand a link to the host: `widget.open(url)` sends one bridge message and the host page opens it in a new tab, limited to http and https. The sandbox still grants no navigation or popups — a widget only gets to ask the host to open a page, and inline cards in a session can do it too.
 - New built-in widget "Countdown": name, date, time, all-day, time zone and a line of note, read as days, hours and minutes to the target and as how long ago it was once it passes. The target is converted from wall time in the chosen zone using `Intl.DateTimeFormat` only, with no time-zone table; an unknown zone name falls back to local time and says so on the card. Minute precision, recomputed every 15 seconds, with the timer stopped while paused.
 - Add an on-demand source editor, independent drafts and a real sandbox preview. Save source as a separate user type while retaining the current card's content and layout; explicitly updating all instances checks expectedHash. Definition, tool and import paths share source protection and directory replacement, preserving binary resource bytes. Preview updates local state only, rejects formal actions, capability calls and notifications, and releases sessions on close or expiry.
+- Create local image cards with bounded decoding, static WebP, instance-owned chunked reads and board media backups; older board packages remain readable.
 
 ### Improvements
 

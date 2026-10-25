@@ -5,6 +5,7 @@
  * 那几项。校验、额度与冲突判定都在宿主，界面按读模型与逐字段原因画表单。
  */
 import type { BoardInstance, CardLayout } from './board'
+import type { MediaBinding, InstanceMedia } from './media'
 import type { LocalizedText, WidgetFamily, WidgetMinBox, WidgetSource } from './widget'
 
 /**
@@ -52,7 +53,7 @@ export interface CardContentModel {
 }
 
 /** `POST /boards/<id>/compose` 的请求体：一次创建一张完整的卡片。 */
-export interface InstanceComposeRequest {
+export interface InstanceComposeRequest extends MediaBinding {
   /** 组件 id；它的 props、data 与 state 都按这个组件的 manifest 校验。 */
   widget: string
   /** 编辑器里预览的那一版组件；不给出时不核对，版本变了也照常创建。 */
@@ -65,7 +66,7 @@ export interface InstanceComposeRequest {
 }
 
 /** `POST /instance/<id>/content` 的请求体：编辑当前实例的内容。 */
-export interface InstanceContentRequest {
+export interface InstanceContentRequest extends MediaBinding {
   /** 编辑器读到的那份看板修订号；对不上就返回 409。 */
   expectedRevision: number
   props?: Record<string, unknown>
@@ -75,6 +76,7 @@ export interface InstanceContentRequest {
 
 /** 内容写入成功后的答复：写入之后的修订号与存下来的那几项。 */
 export interface CardContentSaved {
+  media?: InstanceMedia
   revision: number
   props: Record<string, unknown>
   data: unknown

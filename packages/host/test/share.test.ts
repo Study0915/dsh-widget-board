@@ -15,10 +15,13 @@ import type { RouteContext } from '../src/routes'
 import { createHandler } from '../src/routes'
 import type { WidgetRecord } from '../src/library'
 import { createRegistries } from '../src/sources'
-import { readWidget, writeWidgetDirectory } from '../src/library'
+import { contentHash, readWidget, writeWidgetDirectory } from '../src/library'
 import { writeBoard } from '../src/state'
 import { openWorkspace } from '../src/workspace'
-import { unpackWidget } from '../src/package'
+import { unpackBoard, unpackWidget } from '../src/package'
+import { packBoard } from '../src/package'
+import { createMediaStore } from '../src/media/store'
+import sharp from 'sharp'
 
 const roots: string[] = []
 
@@ -34,7 +37,7 @@ function record(id: string, files: Record<string, string> = {}): WidgetRecord {
     ['style.css', Buffer.from('p{}')],
     ...Object.entries(files).map(([path, content]) => [path, Buffer.from(content)] as [string, Buffer]),
   ])
-  return { manifest: JSON.parse(map.get('widget.json')?.toString('utf8') ?? '{}'), source: 'user', dir: `/w/${id}`, hash: id.padEnd(64, 'a').slice(0, 64), files: map }
+  return { manifest: JSON.parse(map.get('widget.json')?.toString('utf8') ?? '{}'), source: 'user', dir: `/w/${id}`, hash: contentHash(map), files: map }
 }
 
 /** 一张空看板。 */
@@ -143,7 +146,7 @@ describe('组件包的导出与导入', () => {
     // 换个目录导入回来：同一个哈希，不冲突。
     const other = await harness([])
     const imported = await other.send('POST', '/library/import', new Uint8Array(exported.body))
-    expect(imported.status).toBe(201)
+    expect(imported.status, imported.body.toString('utf8')).toBe(201)
     expect(JSON.parse(imported.body.toString('utf8')).entry.id).toBe('demo')
   })
 
@@ -190,6 +193,50 @@ describe('组件包的导出与导入', () => {
 })
 
 describe('看板包的导出与导入', () => {
+  it('真实媒体备份导入完整恢复，并拒绝篡改hash且不残留组件或看板', async () => {
+    const source = await harness()
+    source.context.media = createMediaStore(join(source.dir, 'media-store'), source.context.workspace)
+    const session = source.context.media.session('board:board')
+    const png = await sharp({ create: { width: 40, height: 20, channels: 3, background: '#7395ad' } }).png().toBuffer()
+    const uploaded = await source.context.media.upload(session, 'background', png, 'image/png')
+    const created = await source.send('POST', '/boards/board/compose', JSON.stringify({ widget: 'demo', props: {}, data: null, state: null, media: { background: uploaded.ref }, mediaSession: session, mediaTickets: { background: uploaded.uploadTicket } }))
+    expect(created.status).toBe(201)
+    const exported = await source.send('GET', '/boards/board/export?data=true')
+    expect(exported.status).toBe(200)
+    const target = await harness([])
+    target.context.media = createMediaStore(join(target.dir, 'media-store'), target.context.workspace)
+    const imported = await target.send('POST', '/boards/import', exported.body)
+    expect(imported.status, imported.body.toString()).toBe(201)
+    const instance = target.context.board.instances[0]!
+    expect(instance.media?.background).toBe(uploaded.ref)
+    expect((await target.context.media.read(instance.id, 'background', 0, 24 * 1024)).total).toBe(uploaded.bytes)
+    const invalid = unpackBoard(exported.body)
+    invalid.media![uploaded.ref] = Buffer.from('bad').toString('base64')
+    const refused = await harness([])
+    refused.context.media = createMediaStore(join(refused.dir, 'media-store'), refused.context.workspace)
+    const before = refused.context.workspace.list().length
+    const response = await refused.send('POST', '/boards/import', packBoard(invalid.title, invalid.cards, invalid.widgets, { media: invalid.media }))
+    expect(response.status).toBe(400)
+    expect(refused.context.workspace.list()).toHaveLength(before)
+    expect(await readdir(refused.dir)).toEqual([])
+  })
+
+  it('在任何写入之前拒绝媒体路径、数量与缺失资源', async () => {
+    const source = await harness()
+    await source.send('POST', '/boards/board/instance', JSON.stringify({ widget: 'demo' }))
+    const pkg = unpackBoard((await source.send('GET', '/boards/board/export')).body)
+    for (const media of [{ '../escape': 'AA==' }, Object.fromEntries(Array.from({ length: 65 }, (_, i) => [i.toString(16).padStart(64, '0'), 'AA==']))]) {
+      const target = await harness([])
+      const response = await target.send('POST', '/boards/import', packBoard(pkg.title, pkg.cards, pkg.widgets, { media }))
+      expect(response.status).toBeGreaterThanOrEqual(400)
+      expect(await readdir(target.dir)).toEqual([])
+    }
+    const target = await harness([])
+    const response = await target.send('POST', '/boards/import', packBoard(pkg.title, [{ ...pkg.cards[0]!, media: { background: 'a'.repeat(64) } }], pkg.widgets))
+    expect(response.status).toBe(400)
+    expect(await readdir(target.dir)).toEqual([])
+  })
+
   it('导出的看板包能在另一处导入，卡片与组件都装回来', async () => {
     const source = await harness()
     await source.send('POST', '/boards/board/instance', JSON.stringify({ widget: 'demo', props: { n: 2 } }))
@@ -212,9 +259,9 @@ describe('看板包的导出与导入', () => {
     await source.send('POST', '/boards/board/instance', JSON.stringify({ widget: 'demo' }))
     const id = source.context.board.instances[0]?.id ?? ''
     await source.send('POST', `/instance/${id}/data`, JSON.stringify({ data: { n: 1 } }))
-    const plain = JSON.parse((await source.send('GET', '/boards/board/export')).body.toString('utf8')) as { cards: Record<string, unknown>[] }
+    const plain = unpackBoard((await source.send('GET', '/boards/board/export')).body)
     expect(plain.cards[0]).not.toHaveProperty('data')
-    const withData = JSON.parse((await source.send('GET', '/boards/board/export?data=true')).body.toString('utf8')) as { cards: Record<string, unknown>[] }
+    const withData = unpackBoard((await source.send('GET', '/boards/board/export?data=true')).body)
     expect(withData.cards[0]).toHaveProperty('data')
   })
 
@@ -222,11 +269,11 @@ describe('看板包的导出与导入', () => {
     const source = await harness()
     await source.send('POST', '/boards/board/instance', JSON.stringify({ widget: 'demo' }))
     // 手工造一个引用了不存在的组件的包：把组件表清空。
-    const exported = JSON.parse((await source.send('GET', '/boards/board/export')).body.toString('utf8')) as { widgets: unknown[] }
+    const exported = unpackBoard((await source.send('GET', '/boards/board/export')).body)
     const broken = JSON.stringify({ ...exported, widgets: [] })
     const target = await harness([])
     const response = await target.send('POST', '/boards/import', strToU8(broken))
     expect(response.status).toBe(400)
-    expect(response.body.toString('utf8')).toMatch(/没有装进来/)
+    expect(response.body.toString('utf8')).toMatch(/没有包含在包内/)
   })
 })

@@ -14,6 +14,7 @@ import type {
   WidgetLibraryEntry,
   WidgetSummary,
   WorkspaceSnapshot,
+  MediaBinding,
 } from '@dsh-widget-board/contracts'
 import { FLIP_GROUP_ID } from '@dsh-widget-board/contracts'
 import { isChinese, t, textOf } from '../copy'
@@ -26,6 +27,7 @@ import { SourceEditorPanel } from './source-panel'
 import { PreviewPanel } from './preview-panel'
 import type { Template, TemplateKey } from './templates'
 import { TEMPLATES, seedOf, templateOf } from './templates'
+import { ImageField } from './media-field'
 
 /** 创建器要画的东西。 */
 export interface ComposerProps {
@@ -98,6 +100,9 @@ export function CardComposer({
   const [issues, setIssues] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [media, setMedia] = useState<MediaBinding>({})
+  const [mediaBusy, setMediaBusy] = useState(false)
+  const [mediaPreview, setMediaPreview] = useState<string | null>(null)
   const [confirmClose, setConfirmClose] = useState(false)
   const [previewFamily, setPreviewFamily] = useState<'regular' | 'narrow' | 'wide'>('regular')
   /** 选中组件的那份表单模型：schema 与文案按它画，创建器不必先把实例建出来。 */
@@ -162,6 +167,7 @@ export function CardComposer({
     setProps(seed.props)
     setData(seed.data)
     setState(seed.state)
+    setMedia({})
     setIssues({})
     setError(null)
     setAdvanced(nextAdvanced)
@@ -200,7 +206,7 @@ export function CardComposer({
 
   /** 提交：一次写进一张完整的卡片（C02、C06）。 */
   const submit = async (): Promise<void> => {
-    if (widgetId === null || widget === undefined || saving) return
+    if (widgetId === null || widget === undefined || saving || mediaBusy) return
     setSaving(true)
     setError(null)
     setIssues({})
@@ -210,6 +216,7 @@ export function CardComposer({
         props,
         data,
         state,
+        ...media,
       })
       onCreated(snapshot)
     } catch (caught) {
@@ -293,7 +300,7 @@ export function CardComposer({
                     className="dsh-widget-board__composer-template"
                     data-dsh-widget-board-template={entry.key}
                     aria-pressed={templateKey === entry.key}
-                    disabled={unavailable || saving || sourceOpen}
+                    disabled={unavailable || saving || mediaBusy || sourceOpen}
                     title={unavailable ? t('templateMissing') : isChinese() ? entry.hint.zh : entry.hint.en}
                     onClick={() => { pickTemplate(entry.key) }}
                   >
@@ -383,6 +390,7 @@ export function CardComposer({
               : null}
 
             {formError === null ? null : <p className="dsh-widget-board__editor-error" role="alert">{formError}</p>}
+            {widgetId === 'image' && !sourceOpen ? <ImageField key={widgetId} target={`board:${board.id}`} value={media} onChange={next => { setMedia(next); setProps(current => ({ ...current, localImage: Boolean(next.media?.background) })) }} onBusy={setMediaBusy} onPreview={setMediaPreview} disabled={saving} /> : null}
 
             {ready && form !== null && !sourceOpen
               ? sections.map((section) => {
@@ -456,7 +464,7 @@ export function CardComposer({
                     widget={previewWidget}
                     theme={theme}
                     frames={frames}
-                    content={{ props, data, state }}
+                    content={widgetId === 'image' ? { props: { ...props, localImage: false }, data: { ...(data as Record<string, unknown>), src: mediaPreview ?? '' }, state } : { props, data, state }}
                   />
                 </div>
               )}
@@ -495,7 +503,7 @@ export function CardComposer({
                 type="button"
                 className="dsh-widget-board__editor-primary"
                 data-dsh-widget-board-composer-submit=""
-                disabled={!ready || saving || sourceOpen}
+                disabled={!ready || saving || mediaBusy || sourceOpen}
                 onClick={() => { void submit() }}
               >
                 {saving ? t('formSubmitting') : t('formSubmit')}

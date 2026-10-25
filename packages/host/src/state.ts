@@ -484,6 +484,7 @@ export function withGroupSlotReplaced(
       state: null,
       layout,
     }
+    delete next.media
     if (record.manifest.source === undefined) delete next.source
     else next.source = record.manifest.source
     return next
