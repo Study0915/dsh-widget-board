@@ -49,6 +49,8 @@
 
 ## 版本控制与投稿边界
 
+2026-10-25：用户明确要求继续完成 T06，授权从已通过完整自动验收的 T05 提交 13984e9 创建 feat/campus-card。该推进指令不代替 T05 或统一样式的用户视觉确认；原 pending 记录保留。T06 仅实现手动事项、里程碑、入口和外观，不提前加入 CSV/ICS 或提醒。日期使用既有 I1 规格指定的 Luxon；图片归属复用 T05，资源 hash 留在实例 media，不再复制到 customSchool 配置。
+
 2026-10-25：用户要求视觉统一核对后继续 T05。统一样式按原功能分支分别保存，完整验收未通过的记录保留，T09 不虚报完成。T05 沿 feat/card-composer 实现；用户明确批准把 content/routes.ts 补入 T05 policy，仅接线媒体归属、ticket 和原子保存。format2 采用 gzip JSON，压缩上限 16MiB、JSON 上限 64MiB；独立排列分支尚未合并，备份只保存/重映射排列元数据，不在本分支提前实现排列界面。
 
 用户随后明确批准把 scripts/build.mjs 补入 T05 policy，仅将 sharp 声明为宿主外部依赖，使固定版本的原生平台库可由 Node 加载；原保护文件与 hooks 保持不变。

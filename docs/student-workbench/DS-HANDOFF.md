@@ -2,7 +2,7 @@
 
 ## 当前进度（2026-10-25）
 
-T04 已经用户确认验收通过，完成关卡通过，见 [T04-HANDOFF.md](T04-HANDOFF.md)。跨分支视觉统一已分别保存，九份共享样式/约束文件在四分支完全一致，原生和 Claude 主题视觉检查通过，T00/T01/T02 三条原分支的完整 verify 也已全部补验通过，见 [VISUAL-HANDOFF.md](VISUAL-HANDOFF.md)。T05 实现与完整自动验收已通过：505 项单元测试、真实宿主冒烟与尺寸矩阵；兼容主题十二项媒体回归通过。当前指纹与证据见 [T05-HANDOFF.md](T05-HANDOFF.md)，工作区已恢复 feat/card-composer / T05，待用户浅深色视觉核对，不提前启动 T06。
+T04 已经用户确认验收通过，完成关卡通过，见 [T04-HANDOFF.md](T04-HANDOFF.md)。跨分支视觉统一已分别保存，九份共享样式/约束文件在四分支完全一致，原生和 Claude 主题视觉检查通过，T00/T01/T02 三条原分支的完整 verify 也已全部补验通过，见 [VISUAL-HANDOFF.md](VISUAL-HANDOFF.md)。T05 实现与完整自动验收已通过：505 项单元测试、真实宿主冒烟与尺寸矩阵；兼容主题十二项媒体回归通过，用户视觉核对仍 pending，见 [T05-HANDOFF.md](T05-HANDOFF.md)。用户随后明确要求继续 T06，当前分支为 feat/campus-card、guard 为 T06；校园卡阶段实现与待确认范围见 [T06-HANDOFF.md](T06-HANDOFF.md)，未宣告最终完成。
 
 ## 直接复制的开工指令
 

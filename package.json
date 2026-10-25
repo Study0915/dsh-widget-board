@@ -75,6 +75,7 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.5",
+    "luxon": "3.7.2",
     "sharp": "0.35.5"
   },
   "devDependencies": {
@@ -91,6 +92,7 @@
     "@codemirror/theme-one-dark": "6.1.2",
     "@codemirror/view": "6.38.1",
     "@deepseek-ai/cordis": "4.0.5",
+    "@types/luxon": "3.7.1",
     "@types/node": "^24.10.1",
     "@types/react": "18.3.31",
     "@types/react-dom": "18.3.7",
