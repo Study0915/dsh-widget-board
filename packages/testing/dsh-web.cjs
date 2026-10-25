@@ -183,6 +183,7 @@ async function start(options = {}) {
  */
 async function openPage(url, options = {}) {
   const browser = await launchBrowser({ headless: options.headless ?? true })
+  try {
   const context = await newContextOn(browser, {
     width: options.width ?? 1440,
     height: options.height ?? 900,
@@ -196,6 +197,10 @@ async function openPage(url, options = {}) {
   page.on('pageerror', (error) => problems.push(`pageerror: ${error.message}`))
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 })
   return { page, problems, close: () => browser.close() }
+  } catch (error) {
+    await browser.close()
+    throw error
+  }
 }
 
 /**
