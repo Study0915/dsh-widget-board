@@ -15,13 +15,14 @@ interface Ticket { session: string, role: MediaRole, ref: string, expires: numbe
 export interface MediaStore {
   session(target: string): string
   upload(session: string, role: MediaRole, bytes: Buffer, mime: string): Promise<MediaUploaded>
-  bind<T>(target: string, binding: MediaBinding, commit: (media: InstanceMedia | undefined) => Promise<T>, consume?: boolean): Promise<T>
+  bind<T>(target: string, binding: MediaBinding, commit: (media: InstanceMedia | undefined) => Promise<T>, consume?: boolean, beforeBind?: () => void): Promise<T>
   read(instanceId: string, ref: string, offset: number, length: number): Promise<MediaChunk>
   bytes(ref: string): Promise<Buffer>
   put(bytes: Buffer): Promise<string>
   import<T>(resources: ReadonlyMap<string, Buffer>, commit: () => Promise<T>): Promise<T>
   collect(): Promise<number>
   copy(source: string, target: string, binding: MediaBinding): Promise<MediaBinding>
+  preview(session: string, ticket: string): Promise<Buffer>
 }
 
 /** 未信任的引用表只允许两种角色与 SHA-256。 */
@@ -99,8 +100,9 @@ export function createMediaStore(dir: string, workspace: Workspace, now = Date.n
         return { ref, uploadTicket, mime: 'image/webp', bytes: result.bytes.length, width: result.width, height: result.height }
       })
     },
-    async bind(target, binding, commit, consume = true) {
+    async bind(target, binding, commit, consume = true, beforeBind) {
       return await serial(async () => {
+        beforeBind?.()
         expire()
         const existing = workspace.findInstance(target)?.instance.media
         if (binding.media === undefined) return await commit(existing)
@@ -135,6 +137,12 @@ export function createMediaStore(dir: string, workspace: Workspace, now = Date.n
       }, false)
       return result
     },
+    async preview(session, id) {
+      expire()
+      const ticket = tickets.get(id)
+      if (!sessions.has(session) || !ticket || ticket.session !== session) throw new Refusal(403, '图片预览会话已过期')
+      return await bytesOf(ticket.ref)
+    },
     async read(instanceId, ref, offset, length) {
       const media = workspace.findInstance(instanceId)?.instance.media
       const resolved = media?.[ref as MediaRole] ?? ref
@@ -160,7 +168,8 @@ export function createMediaStore(dir: string, workspace: Workspace, now = Date.n
           }
           return await commit()
         } catch (error) {
-          for (const ref of created) await unlink(fileOf(ref))
+          const bound = new Set(workspace.list().flatMap(board => board.instances.flatMap(instance => Object.values(instance.media ?? {}))))
+          for (const ref of created) if (!bound.has(ref)) await unlink(fileOf(ref))
           throw error
         }
       })

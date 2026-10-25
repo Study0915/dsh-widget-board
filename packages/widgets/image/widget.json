@@ -32,6 +32,10 @@
     }
   },
   "text": {
+    "props.focusX.label": { "zh": "水平焦点（%）", "en": "Horizontal focus (%)" },
+    "props.focusY.label": { "zh": "垂直焦点（%）", "en": "Vertical focus (%)" },
+    "data.alt.label": { "zh": "图片替代文字", "en": "Alternative text" },
+    "data.caption.label": { "zh": "图片说明", "en": "Caption" },
     "empty": {
       "zh": "还没有图片",
       "en": "No image"

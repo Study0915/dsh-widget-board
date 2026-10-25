@@ -71,8 +71,11 @@ describe('媒体归属与提交', () => {
   it('失败不消费 ticket，成功后不能用于另一次绑定', async () => {
     const test = await setup()
     const { image, binding } = await test.upload()
+    await expect(test.store.preview('other-session', image.uploadTicket)).rejects.toThrow(/预览会话/)
+    expect((await test.store.preview(binding.mediaSession, image.uploadTicket)).length).toBe(image.bytes)
     await expect(test.store.bind('one', binding, async () => { throw new Error('保存失败') })).rejects.toThrow('保存失败')
     await test.bind('one', binding)
+    await expect(test.store.preview(binding.mediaSession, image.uploadTicket)).rejects.toThrow(/预览会话/)
     expect(test.workspace.findInstance('one')?.instance.media?.background).toBe(image.ref)
     await test.bind('one', { media: {} })
     await expect(test.bind('one', binding)).rejects.toThrow(/归属/)

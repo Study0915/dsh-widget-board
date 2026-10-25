@@ -30,9 +30,9 @@ import { mediaOf } from '../media/routes'
 import type { MediaBinding, InstanceMedia } from '@dsh-widget-board/contracts'
 
 /** 没有媒体修改时兼容现有宿主与调用；有修改时必须使用受限存储事务。 */
-async function bindMedia<T>(context: RouteContext, target: string, binding: MediaBinding, save: (media: InstanceMedia | undefined) => Promise<T>): Promise<T> {
-  if (binding.media === undefined) return await save(context.workspace.findInstance(target)?.instance.media)
-  return await mediaOf(context).bind(target, binding, save)
+async function bindMedia<T>(context: RouteContext, target: string, binding: MediaBinding, save: (media: InstanceMedia | undefined) => Promise<T>, beforeBind?: () => void): Promise<T> {
+  if (binding.media === undefined) { beforeBind?.(); return await save(context.workspace.findInstance(target)?.instance.media) }
+  return await mediaOf(context).bind(target, binding, save, true, beforeBind)
 }
 
 /** 创建与编辑的请求体上限（技术契约 3）：一整张卡的内容，比单次状态写入大。 */
@@ -215,7 +215,10 @@ export function contentRoutes(context: RouteContext): Route[] {
               ...('data' in wanted ? { data: content.data } : {}),
               ...('state' in wanted ? { state: content.state } : {}),
             }),
-          }))
+          }), () => {
+            const actual = context.workspace.board(found.board.id).revision
+            if (actual !== wanted.expectedRevision) throw new ContentStaleError(wanted.expectedRevision, actual)
+          })
         } catch (error) {
           if (error instanceof ContentStaleError) {
             json(response, 409, { error: error.message, code: 'stale-revision', revision: error.actual, snapshot: workspaceSnapshot(context) })

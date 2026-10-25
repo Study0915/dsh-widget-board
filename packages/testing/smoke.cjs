@@ -458,7 +458,7 @@ async function sharePass(page) {
   const board = await page.evaluate(async () => {
     const snapshot = await (await fetch('api/widget-board/boards')).json()
     const exported = await fetch(`api/widget-board/boards/${encodeURIComponent(snapshot.active)}/export`)
-    const pkg = await exported.json()
+    const pkg = await new Response(exported.body.pipeThrough(new DecompressionStream('gzip'))).json()
     return { status: exported.status, cards: Array.isArray(pkg.cards) ? pkg.cards.length : -1, widgets: Array.isArray(pkg.widgets) ? pkg.widgets.length : -1 }
   })
   check('看板导出带着卡片与用到的组件', board.status === 200 && board.cards > 0 && board.widgets > 0, JSON.stringify(board))

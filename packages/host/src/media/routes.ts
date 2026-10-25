@@ -13,6 +13,13 @@ export function mediaOf(context: RouteContext): MediaStore {
 }
 export function mediaRoutes(): Route[] {
   return [
+    { method: 'POST', pattern: /^\/media\/preview$/, limit: 1024, async handle(context, request, response) {
+      const raw = await readJson(request, 1024)
+      if (!isRecord(raw) || typeof raw.session !== 'string' || typeof raw.ticket !== 'string') throw new Refusal(400, '图片预览缺少会话或ticket')
+      const bytes = await mediaOf(context).preview(raw.session, raw.ticket)
+      response.writeHead(200, { 'content-type': 'image/webp', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
+      response.end(bytes)
+    } },
     { method: 'POST', pattern: /^\/media\/copy$/, limit: 4096, async handle(context, request, response) {
       const raw = await readJson(request, 4096)
       if (!isRecord(raw) || typeof raw.source !== 'string' || typeof raw.board !== 'string' || !context.workspace.has(raw.board)) throw new Refusal(400, '媒体复制目标不合法')

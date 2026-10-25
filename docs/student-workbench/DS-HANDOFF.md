@@ -2,7 +2,7 @@
 
 ## 当前进度（2026-10-25）
 
-T04 已经用户确认验收通过，完成关卡通过，见 [T04-HANDOFF.md](T04-HANDOFF.md)。跨分支视觉统一已分别保存，九份共享样式/约束文件在四分支完全一致，原生和 Claude 主题视觉检查均通过；完整验收限制及截图见 [VISUAL-HANDOFF.md](VISUAL-HANDOFF.md)。按用户最新指令已启动 T05，当前实现与待确认的 sharp 构建接线见 [T05-HANDOFF.md](T05-HANDOFF.md)。T05 尚未最终验收，不启动 T06。
+T04 已经用户确认验收通过，完成关卡通过，见 [T04-HANDOFF.md](T04-HANDOFF.md)。跨分支视觉统一已分别保存，九份共享样式/约束文件在四分支完全一致，原生和 Claude 主题视觉检查均通过，见 [VISUAL-HANDOFF.md](VISUAL-HANDOFF.md)。T05 实现与完整自动验收已通过：505 项单元测试、真实宿主冒烟与尺寸矩阵；兼容主题十二项媒体回归通过。当前指纹与证据见 [T05-HANDOFF.md](T05-HANDOFF.md)，待用户浅深色视觉核对，不提前启动 T06。
 
 ## 直接复制的开工指令
 

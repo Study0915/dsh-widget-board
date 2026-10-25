@@ -45,8 +45,8 @@ const CLIENT_BASELINE = [
   '@deepseek-ai/dsh-client-ui-dockkit',
 ]
 
-/** 宿主进程提供的包：留在产物里，由宿主按自己的 node_modules 解析。 */
-const HOST_NODE_PACKAGES = ['@deepseek-ai/*']
+/** 平台包及原生图片库保留模块导入，由运行时加载对应的平台二进制。 */
+const HOST_NODE_PACKAGES = ['@deepseek-ai/*', 'sharp']
 
 /**
  * 加载器工厂的包装：`require` 解析宿主提供的包，产物的 `module.exports` 就是加载器拿到的插件导出。
