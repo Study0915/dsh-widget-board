@@ -1,6 +1,5 @@
 'use strict'
 /** 真实沙箱里的跨任务排版契约；只比较确定性的字体、字号和间距。 */
-const { waitFor } = require('./road.cjs')
 const tokens = require('../contracts/tokens.json')
 
 async function visualContractPass(page, check) {
@@ -11,7 +10,7 @@ async function visualContractPass(page, check) {
     const frame = await handle.contentFrame()
     if (!frame) continue
     const title = await handle.getAttribute('title')
-    const ready = await waitFor(async () => await frame.evaluate((expected) => getComputedStyle(document.body).fontFamily === expected, expectedFont), 5000)
+    const ready = await frame.waitForFunction((expected) => getComputedStyle(document.body).fontFamily === expected, expectedFont, { timeout: 5000 }).then(() => true, () => false)
     check(`统一宿主字体 ${title}`, ready)
     const result = await frame.evaluate(() => {
       const body = getComputedStyle(document.body)
