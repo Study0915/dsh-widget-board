@@ -2,6 +2,8 @@
 
 本地图片处理使用 **sharp 0.35.5**（Apache-2.0，https://github.com/lovell/sharp），依赖的 libvips 及平台二进制按其随附许可分发；不向外部服务上传图片。
 
+校园事项的 IANA 时区及夏令时处理使用 **Luxon 3.7.2**（MIT，https://github.com/moment/luxon）。共享纯模型在构建时内联进标准校园组件；不请求外部时间服务。
+
 本插件随包发布两个精选库，构建时打进 `lib/runtime/libs/`，组件文档用到它们时内联：
 
 - **marked** — Markdown 解析器，MIT License，https://github.com/markedjs/marked
