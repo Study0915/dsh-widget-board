@@ -7,6 +7,7 @@
  * 卡片内容之外。查完把卡片移除，后面的场景仍从原来的看板开始。
  */
 const { openLibrary } = require('./library.cjs')
+const { visualContractPass } = require('./visual-contract.cjs')
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -17,6 +18,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
  * @param check - 记一条判据的函数。
  */
 async function markdownPass(page, check) {
+  await visualContractPass(page, check)
   const before = await page.evaluate(() => document.querySelectorAll('[data-instance]').length)
   await openLibrary(page)
   await page.waitForSelector('[data-dsh-widget-board-add="markdown"]', { timeout: 10000 })
