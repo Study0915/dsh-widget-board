@@ -47,6 +47,8 @@ import type { ToolRegistration } from './tools'
 import { openWorkspace } from './workspace'
 import { watchTree } from './watch'
 import { dshHome } from './home'
+import { createMediaStore } from './media/store'
+import { mediaCapability } from './media/capability'
 
 /** 插件名：宿主的加载器按它登记这一行。 */
 export const name = PACKAGE_NAME
@@ -126,6 +128,8 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const drafts = openDrafts(draftsDirOf(home))
   // 预览会话：还没写进组件库的那一份代码（技术契约 5）。与正式的 records、versions、grants 分开。
   const previews = createPreviews()
+  const media = createMediaStore(join(home, 'media'), workspace)
+  const disposeMedia = sources.registerCapability(mediaCapability(media))
 
   /** 刷新路由要调的重读：重读函数在下面定义，闭包先接住这个变量。 */
   let refreshLibrary: () => Promise<void> = async () => {}
@@ -165,6 +169,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
     requests,
     drafts,
     previews,
+    media,
   }
   // 运行成本的数据源（issue #5）：只读宿主自己的内存与工作区、组件库，不声明权限（D6）。
   const disposeSystemMetrics = sources.registerDataSource(createSystemMetricsSource({
@@ -330,6 +335,7 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
 
   ctx.effect(() => () => {
     disposeDshAccount()
+    disposeMedia()
     disposeGithub()
     tools?.dispose()
     disposeSystemMetrics()

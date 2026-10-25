@@ -8,6 +8,7 @@
  */
 const { openLibrary } = require('./library.cjs')
 const { visualContractPass } = require('./visual-contract.cjs')
+const { mediaPass } = require('./media.cjs')
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -19,6 +20,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
  */
 async function markdownPass(page, check) {
   await visualContractPass(page, check)
+  await mediaPass(page, check)
   const before = await page.evaluate(() => document.querySelectorAll('[data-instance]').length)
   await openLibrary(page)
   await page.waitForSelector('[data-dsh-widget-board-add="markdown"]', { timeout: 10000 })

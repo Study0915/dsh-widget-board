@@ -2,6 +2,10 @@
 
 [English](README.en.md)
 
+本地图片：在“创建卡片”中选择图片模板，上传不超过 10MiB 的静态 PNG/JPEG/WebP，填写 alt、说明与焦点。宿主会去除元数据并转换为受限 WebP；图片以实例媒体引用保存。组件声明 `widget-board:media.read` 后可用 `await widget.readMedia('background', { signal })` 取得 Blob，创建的对象 URL 由组件在暂停、替换和卸载时释放。
+
+`.dshboard` 的 format2 使用 gzip 压缩 JSON，包含引用的图片、实例和组的标识及排列元数据。需要正文和状态时仍勾选“带上数据”。导入先校验全部资源，再创建完整看板；format1 仍可读取。`.dshw` 继续只导出组件源码和类型资源。媒体整理通过人工 `POST api/widget-board/media/collect` 清除超过 24 小时、没有实例或有效上传 ticket 引用的资源。
+
 DeepSeek Harness 的组件看板：一页可以拖动、缩放的卡片，每张卡片是一个小组件。组件由你或会话里的 agent 写成三份文件，也可以由其他插件提供。
 
 **[在线演示](https://nwflower.github.io/dsh-widget-board/)** · [安装](#安装) · [写一个组件](#写一个组件) · [给插件提供方](#给插件提供方)

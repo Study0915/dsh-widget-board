@@ -40,6 +40,8 @@ import { buildDocument, contentSecurityPolicy, freshNonce } from './document'
 import { groupRoutes } from './groups'
 import { capabilityRoutes } from './capabilities'
 import { contentRoutes } from './content/routes'
+import type { MediaStore } from './media/store'
+import { mediaRoutes } from './media/routes'
 import type { DraftStore } from './drafts/store'
 import { draftRoutes } from './drafts/routes'
 import type { PreviewStore } from './preview/store'
@@ -85,6 +87,7 @@ const EMPTY_LIMIT = 1024
 
 /** 路由处理器读到的一切；组件库与资产随热重载替换，所以这里持有一个可变的对象。 */
 export interface RouteContext {
+  media?: MediaStore
   /** 当前可用的组件，按 id 索引。 */
   records: Map<string, WidgetRecord>
   /** 给界面的全部组件类型，含读不出来的那些（D17）。 */
@@ -661,7 +664,7 @@ export function createHandler(context: RouteContext): (req: HostRequest, res: Ho
     }
     const url = new URL(request.url ?? '/', 'http://board.invalid')
     const path = url.pathname.startsWith(PLUGIN_ROUTE) ? url.pathname.slice(PLUGIN_ROUTE.length) : ''
-    const matched = [...ROUTES, ...shareRoutes(context), ...settingsRoutes(), ...groupRoutes(), ...capabilityRoutes(), ...contentRoutes(context), ...selfCheckRoutes(), ...sourceRoutes(context), ...draftRoutes(context.drafts), ...previewRoutes(context.previews)].flatMap((route) => {
+    const matched = [...ROUTES, ...shareRoutes(context), ...settingsRoutes(), ...groupRoutes(), ...capabilityRoutes(), ...contentRoutes(context), ...mediaRoutes(), ...selfCheckRoutes(), ...sourceRoutes(context), ...draftRoutes(context.drafts), ...previewRoutes(context.previews)].flatMap((route) => {
       const match = route.pattern.exec(path)
       return match === null ? [] : [{ route, match }]
     })

@@ -74,7 +74,8 @@
     "react": "^18.2.0"
   },
   "dependencies": {
-    "@deepseek-ai/schemastery": "^3.18.5"
+    "@deepseek-ai/schemastery": "^3.18.5",
+    "sharp": "0.35.5"
   },
   "devDependencies": {
     "@codemirror/autocomplete": "6.18.6",

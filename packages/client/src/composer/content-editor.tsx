@@ -15,6 +15,7 @@ import type {
   WidgetLibraryEntry,
   WidgetSummary,
   WorkspaceSnapshot,
+  MediaBinding,
 } from '@dsh-widget-board/contracts'
 import { t, textOf } from '../copy'
 import type { FrameHost } from '../frame-host'
@@ -30,6 +31,7 @@ import {
 import { SchemaForm, formPathOf } from './fields'
 import { SourceEditorPanel } from './source-panel'
 import { PreviewPanel } from './preview-panel'
+import { copyMedia, ImageField } from './media-field'
 
 /** 内容编辑器要画的东西。 */
 export interface ContentEditorProps {
@@ -108,6 +110,9 @@ export function ContentEditor({
   const [error, setError] = useState<string | null>(null)
   const [stale, setStale] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [media, setMedia] = useState<MediaBinding>({})
+  const [mediaBusy, setMediaBusy] = useState(false)
+  const [mediaPreview, setMediaPreview] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [confirmClose, setConfirmClose] = useState(false)
   const [savedOnce, setSavedOnce] = useState(false)
@@ -150,6 +155,7 @@ export function ContentEditor({
       setProps(next.instance.props)
       setData(next.instance.data)
       setState(next.instance.state)
+      setMedia(next.instance.media === undefined ? {} : { media: next.instance.media })
       setIssues({})
       setError(null)
       setSavedOnce(false)
@@ -167,12 +173,13 @@ export function ContentEditor({
   const blank = model === null
     || (JSON.stringify(props) === JSON.stringify(model.instance.props)
       && JSON.stringify(data) === JSON.stringify(model.instance.data)
-      && JSON.stringify(state) === JSON.stringify(model.instance.state))
+      && JSON.stringify(state) === JSON.stringify(model.instance.state)
+      && JSON.stringify(media.media ?? {}) === JSON.stringify(model.instance.media ?? {}))
   const dirty = !blank
 
   /** 保存：带上读到的修订号；字段原因、冲突与失败分开处理（C06、C07）。 */
   const save = async (): Promise<void> => {
-    if (model === null || saving) return
+    if (model === null || saving || mediaBusy) return
     setSaving(true)
     setError(null)
     setIssues({})
@@ -180,11 +187,13 @@ export function ContentEditor({
     try {
       const saved = await saveCardContent(instanceId, {
         expectedRevision: model.revision,
+        ...media,
         props,
         data,
         state,
       })
-      setModel({ ...model, revision: saved.revision, instance: { ...model.instance, props: saved.props, data: saved.data, state: saved.state } })
+      setModel({ ...model, revision: saved.revision, instance: { ...model.instance, props: saved.props, data: saved.data, state: saved.state, media: saved.media } })
+      setMedia(saved.media === undefined ? {} : { media: saved.media })
       setProps(saved.props)
       setData(saved.data)
       setState(saved.state)
@@ -212,8 +221,10 @@ export function ContentEditor({
     setSaving(true)
     setError(null)
     try {
+      const copiedMedia = media.media === undefined ? {} : await copyMedia(instanceId, board.id, media)
       const { snapshot } = await composeInstance(board.id, {
         widget: model.widget.id,
+        ...copiedMedia,
         props,
         data,
         state,
@@ -297,6 +308,7 @@ export function ContentEditor({
         {sourceOpen ? <div className="dsh-widget-board__source-panes">{(['editor', 'preview'] as const).map((pane) => <button key={pane} type="button" className="dsh-widget-board__editor-ghost" aria-pressed={sourcePane === pane} onClick={() => { setSourcePane(pane) }}>{pane === 'editor' ? '源码' : '预览'}</button>)}</div> : null}
         <div className="dsh-widget-board__composer-body" data-dsh-widget-board-source-pane={sourceOpen ? sourcePane : undefined}>
           <div className="dsh-widget-board__composer-form">
+            {model?.widget.id === 'image' && !sourceOpen ? <ImageField target={instanceId} value={media} onChange={next => { setMedia(next); setProps(current => ({ ...current, localImage: Boolean(next.media?.background) })) }} onBusy={setMediaBusy} onPreview={setMediaPreview} disabled={saving} /> : null}
             {model === null ? null : <button type="button" className="dsh-widget-board__editor-ghost" data-dsh-widget-board-content-source="" onClick={() => { setSourceOpen(true) }}>{t('sourceTitle')}</button>}
             {sourceOpen && model !== null ? <SourceEditorPanel widgetId={model.widget.id} instanceId={instanceId} theme={theme} onFilesChanged={setSourceFiles} onBinaryChanged={setSourceBinary} onRestore={() => { setPreviewAutoRun(false) }} closeRequest={sourceCloseRequest} onClose={() => { setSourceOpen(false); setSourceCloseRequest(0) }} onSaved={() => { setSourceOpen(false); load(true); onSaved() }} /> : null}
             {loadError === null
@@ -379,7 +391,7 @@ export function ContentEditor({
                     widget={preview}
                     theme={theme}
                     frames={frames}
-                    content={{ props, data, state }}
+                    content={model.widget.id === 'image' ? { props: { ...props, localImage: false }, data: { ...(data as Record<string, unknown>), src: mediaPreview ?? '' }, state } : { props, data, state }}
                   />
                 </div>
               )}
@@ -418,7 +430,7 @@ export function ContentEditor({
                 type="button"
                 className="dsh-widget-board__editor-primary"
                 data-dsh-widget-board-content-save=""
-                disabled={saving || model === null || !dirty || sourceOpen}
+                disabled={saving || mediaBusy || model === null || !dirty || sourceOpen}
                 onClick={() => { void save() }}
               >
                 {saving ? t('formSaving') : t('save')}
