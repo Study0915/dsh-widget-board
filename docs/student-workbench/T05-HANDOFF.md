@@ -1,6 +1,6 @@
 # T05 受限媒体与完整备份交接（2026-10-25）
 
-状态：实现阶段已保存，未通过最终验收。当前任务 T05，分支 feat/card-composer。不要标记 complete，也不要继续 T06。
+状态：代码实现、自动验收与 Codex 自审完成；用户浅深色视觉核对待确认。当前任务 T05，分支 feat/card-composer。用户视觉确认前不标记 complete，不启动 T06。
 
 ## 已实现
 
@@ -13,16 +13,20 @@
 
 ## 当前证据
 
-`.debug/evidence/T05/checks.json` 绑定当前代码指纹，记录 lint、build、ADR 索引、CHANGELOG、AGENTS 命令表、单元测试与 guard check 的真实命令和退出码；全部为 0，单元测试 504 项。测试临时目录置于工作区 .debug。
+最终权威收据为 `.debug/local-review/T05/verify.json` 和 verify.log：`node .local-guardrails/guard.mjs verify` 调用原 `npm run verify`，真实退出码 0，运行期间源码未变化。指纹 `961e00ce9910e0c61392832eed3ad72f0de9c09e5d5251fd1df26a68db568d73`。lint、文档索引、CHANGELOG、命令表、构建、提供方类型入口、505 项单元测试、真实宿主冒烟、尺寸矩阵全部通过。矩阵沿原规则跳过 51 个低于组件下限的盒子，未放宽检查。
 
-真实独立 DSH_HOME 使用 `.debug/t05-media-mIVp53`，检查未通过：插件在导入阶段报告 `Dynamic require of "child_process" is not supported`，因此看板未出现。脱敏宿主日志为 `.debug/host-logs/t05-media-mIVp53.log`。原因已定位为 sharp 原生依赖被现有 esbuild 宿主配置内联。浏览器用 Edge、独立上下文，测试实例已停止；没有改动用户正式 DSH。
+真实宿主为局部 DSH 0.2.1-rc.2，浏览器为 Edge 独立上下文，兼容主题 dsh-claude-style 0.17.0；DSH_HOME、浏览器数据与临时目录均在 .debug。原生最终完整验收宿主为 smoke-4xVdCj、matrix-l9oxad，兼容主题媒体宿主为 t05-media-Ejmn3L，均已停止。没有操作用户正式桌面 DSH；真实桌面外壳未验证。
 
-## 待处理
+## 实际界面与审阅
 
-已向用户请求补充 `scripts/build.mjs` 到 T05 policy，仅将 sharp 登记为宿主外部依赖；截至本记录尚未收到该项确认。具体修正为 `HOST_NODE_PACKAGES` 增加 `'sharp'`，包与平台二进制由固定运行时依赖提供。不改 verify/lint、CSP 或安全保护基线。确认前不修改该范围外文件。
+用户已确认补充 `scripts/build.mjs` 到 T05 policy，仅将 sharp 登记为宿主外部依赖。`HOST_NODE_PACKAGES` 已增加 `'sharp'`，包与平台二进制由固定运行时依赖提供；独立宿主已成功启动。不改 verify/lint、CSP 或安全保护基线。
 
-确认后先调整该项局部 scope，再修正构建并运行 `.debug/t05-media-audit.cjs`。真实上传、图片显示、刷新与备份恢复的浏览器断言目前未执行成功，M08 的浏览器对象 URL 释放仍待核对；已有 Node 层回归不能替代这些结果。随后运行原 `guard.mjs verify`，可对子进程设置 `VITEST_MAX_WORKERS=2`（已从安装的 Vitest 源码核实支持），保持原检查入口和全部断言。
+原生完整验收与兼容主题十二项媒体回归均通过：上传、受控预览、只保存资源 hash、沙箱分块读取、暂停释放 URL、恢复读取、已有图片编辑、跨窗口 409 冲突及重读更新、越权拒绝、备份重建实例 id、导入恢复与刷新恢复。编辑预览只显示当前会话获准读取的处理后图片，不执行组件代码、不把正式媒体读取开放给源码预览。旧修订号先回 409，实际保存队列仍再次核对；重新读取会订阅新的媒体引用。
 
-按原生/Claude 主题浅深色、窄矮尺寸核对图片与编辑器，并实际打开截图。更新当前代码指纹的完整收据与自审；用户视觉核对状态如实记录。完整验收前保持阶段版本状态。
+已打开原生浅色编辑器和图片卡、原生深色单列图片卡、Claude 浅色编辑器和深色单列图片卡：正文和说明使用共享层级，焦点控件、圆角与周围 T04 外壳一致，无横向溢出或被裁按钮。图片覆盖整个画面区域，说明位于独立区域。1440/1024/640 截图在 `.debug/evidence/T05/`，兼容主题的报告和截图归档到 claude/。窄矮卡片由原尺寸矩阵覆盖。
 
-下一步：收到 sharp 构建接线范围确认后完成真实宿主回归与完整验收，再更新本交接。
+Node 层另覆盖签名/MIME、动画/损坏输入/额度、去元数据、ticket 过期与消费、实际实例归属、分块长度与取消、旧格式读取、媒体与排列引用、坏包无部分导入、真实 I/O 刷新失败的目录恢复、资源整理不删在用图片。失败与旧通过版本保留在 `.debug/evidence/T05/verify-before-*` 及脱敏 host-logs；它们不替代最终指纹收据。
+
+`.debug/local-review/T05/review.json` 为 Codex 自审，用户视觉核对保持 pending；未提交上游 PR/Issue、未合并其他功能分支、未发布包。
+
+下一步：用户核对浅深色效果；确认后绑定同一指纹完成 T05 验收，再按原流程开始 T06。

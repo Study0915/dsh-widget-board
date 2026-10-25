@@ -4,7 +4,7 @@
  * 判的是「别人的文件进来会发生什么」在路由这一层的表现：导出得到的东西能再导入、同 id 不同内容
  * 回 409 并带上两边的哈希、内置组件不许被覆盖、看板包里引用了没装进来的组件时整包拒绝。
  */
-import { mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -193,6 +193,23 @@ describe('组件包的导出与导入', () => {
 })
 
 describe('看板包的导出与导入', () => {
+  it('组件写入后发生真实刷新读取失败时清理本次目录', async () => {
+    const source = await harness()
+    await source.send('POST', '/boards/board/instance', JSON.stringify({ widget: 'demo' }))
+    const pkg = (await source.send('GET', '/boards/board/export')).body
+    const target = await harness([])
+    const refresh = target.context.refresh
+    target.context.refresh = async () => {
+      await refresh()
+      // 故意读取不存在的测试文件，让真实 I/O 在目录交换后的刷新阶段失败。
+      await readFile(join(target.dir, 'missing-refresh-input'))
+    }
+    const count = target.context.workspace.list().length
+    const response = await target.send('POST', '/boards/import', pkg)
+    expect(response.status).toBe(500)
+    expect(await readdir(target.dir)).toEqual([])
+    expect(target.context.workspace.list()).toHaveLength(count)
+  })
   it('真实媒体备份导入完整恢复，并拒绝篡改hash且不残留组件或看板', async () => {
     const source = await harness()
     source.context.media = createMediaStore(join(source.dir, 'media-store'), source.context.workspace)
@@ -201,6 +218,10 @@ describe('看板包的导出与导入', () => {
     const uploaded = await source.context.media.upload(session, 'background', png, 'image/png')
     const created = await source.send('POST', '/boards/board/compose', JSON.stringify({ widget: 'demo', props: {}, data: null, state: null, media: { background: uploaded.ref }, mediaSession: session, mediaTickets: { background: uploaded.uploadTicket } }))
     expect(created.status).toBe(201)
+    const id = JSON.parse(created.body.toString()).id as string
+    const stale = await source.send('POST', `/instance/${id}/content`, JSON.stringify({ expectedRevision: 0, media: { background: 'f'.repeat(64) } }))
+    expect(stale.status).toBe(409)
+    expect(JSON.parse(stale.body.toString()).code).toBe('stale-revision')
     const exported = await source.send('GET', '/boards/board/export?data=true')
     expect(exported.status).toBe(200)
     const target = await harness([])

@@ -31,7 +31,7 @@ import {
 import { SchemaForm, formPathOf } from './fields'
 import { SourceEditorPanel } from './source-panel'
 import { PreviewPanel } from './preview-panel'
-import { copyMedia, ImageField } from './media-field'
+import { copyMedia, imageFormSchema, ImageDraftPreview, ImageField } from './media-field'
 
 /** 内容编辑器要画的东西。 */
 export interface ContentEditorProps {
@@ -335,7 +335,7 @@ export function ContentEditor({
                   <section key={section.key} className="dsh-widget-board__composer-section" data-dsh-widget-board-content-section={section.key}>
                     <h3 className="dsh-widget-board__composer-heading">{section.title}</h3>
                     <SchemaForm
-                      schema={schema}
+                      schema={model.widget.id === 'image' ? imageFormSchema(schema, section.key) : schema}
                       value={value}
                       onChange={write}
                       text={model.widget.text}
@@ -385,14 +385,14 @@ export function ContentEditor({
               ? <p className="dsh-widget-board__editor-empty">{t('formPreviewHint')}</p>
               : (
                 <div className="dsh-widget-board__composer-frame">
-                  <WidgetPreview
+                  {model.widget.id === 'image' ? <ImageDraftPreview url={mediaPreview} props={props} data={data} /> : <WidgetPreview
                     id={`content:${instanceId}`}
                     widgetId={model.widget.id}
                     widget={preview}
                     theme={theme}
                     frames={frames}
-                    content={model.widget.id === 'image' ? { props: { ...props, localImage: false }, data: { ...(data as Record<string, unknown>), src: mediaPreview ?? '' }, state } : { props, data, state }}
-                  />
+                    content={{ props, data, state }}
+                  />}
                 </div>
               )}
           </aside>

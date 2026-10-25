@@ -57,6 +57,7 @@ async function install(
   id: string,
   files: readonly { path: string, content: Uint8Array }[],
   expectedHash?: string,
+  onSwapped?: () => void,
 ): Promise<void> {
   const existing = context.records.get(id)
   if (existing !== undefined && existing.source !== 'user') {
@@ -78,7 +79,7 @@ async function install(
       files: rest,
       ...(expectedHash === undefined ? {} : { expectedHash }),
     },
-    reload: context.refresh,
+    reload: async () => { onSwapped?.(); await context.refresh() },
   })
 }
 

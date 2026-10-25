@@ -4,10 +4,10 @@ import { dirname, join, resolve, sep } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { BoardPackageWidget, PackageFile } from '../package'
 import type { RouteContext } from '../routes'
-import { readWidget, writeTree, type WidgetRecord } from '../library'
+import { contentHash, readWidget, writeTree, type WidgetRecord } from '../library'
 import { userRootOf } from '../widget-write/write'
 
-type Install = (context: RouteContext, id: string, files: readonly PackageFile[], expectedHash?: string) => Promise<void>
+type Install = (context: RouteContext, id: string, files: readonly PackageFile[], expectedHash?: string, onSwapped?: () => void) => Promise<void>
 
 export async function importTransaction<T>(context: RouteContext, widgets: readonly BoardPackageWidget[], install: Install, commit: (installed: number) => Promise<T>): Promise<T> {
   const changed: Array<{ id: string, before: WidgetRecord | undefined, hash: string }> = []
@@ -15,17 +15,26 @@ export async function importTransaction<T>(context: RouteContext, widgets: reado
     for (const widget of widgets) {
       const before = context.records.get(widget.manifest.id)
       if (before?.hash === widget.hash) continue
-      await install(context, widget.manifest.id, Object.entries(widget.files).map(([path, value]) => ({ path, content: Buffer.from(value, 'base64') })), before?.hash)
-      await context.refresh()
+      const files = Object.entries(widget.files).map(([path, value]) => ({ path, content: Buffer.from(value, 'base64') }))
+      const canonical = new Map(files.map(file => [file.path, file.content]))
+      canonical.set('widget.json', Buffer.from(`${JSON.stringify(widget.manifest, null, 2)}\n`))
+      let registered = false
+      await install(context, widget.manifest.id, files, before?.hash, () => {
+        if (!registered) changed.push({ id: widget.manifest.id, before, hash: contentHash(canonical) })
+        registered = true
+      })
       const installed = context.records.get(widget.manifest.id)
       if (!installed) throw new Error('安装后的组件不可用')
-      changed.push({ id: widget.manifest.id, before, hash: installed.hash })
     }
     return await commit(changed.length)
   } catch (error) {
     for (const entry of changed.reverse()) {
-      const current = context.records.get(entry.id)
-      if (current?.hash !== entry.hash) throw new AggregateError([error], `导入失败，${entry.id} 又被修改，保留该目录并停止自动恢复`)
+      const sourceRoot = await realpath(userRootOf(context.roots).dir)
+      const directory = resolve(sourceRoot, entry.id)
+      if (!directory.startsWith(sourceRoot + sep) || (await lstat(directory)).isSymbolicLink() || await realpath(directory) !== directory) throw new Error('组件目录路径发生变化，拒绝自动恢复')
+      const current = await readWidget(directory, { source: 'user' })
+      if (entry.before?.hash === current.hash) continue
+      if (current.hash !== entry.hash) throw new AggregateError([error], `导入失败，${entry.id} 又被修改，保留该目录并停止自动恢复`)
       if (entry.before) {
         const root = await realpath(userRootOf(context.roots).dir)
         const target = resolve(root, entry.id)

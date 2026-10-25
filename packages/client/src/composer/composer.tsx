@@ -27,7 +27,7 @@ import { SourceEditorPanel } from './source-panel'
 import { PreviewPanel } from './preview-panel'
 import type { Template, TemplateKey } from './templates'
 import { TEMPLATES, seedOf, templateOf } from './templates'
-import { ImageField } from './media-field'
+import { imageFormSchema, ImageDraftPreview, ImageField } from './media-field'
 
 /** 创建器要画的东西。 */
 export interface ComposerProps {
@@ -403,7 +403,7 @@ export function CardComposer({
                   <section key={section.key} className="dsh-widget-board__composer-section" data-dsh-widget-board-composer-section={section.key}>
                     <h3 className="dsh-widget-board__composer-heading">{section.title}</h3>
                     <SchemaForm
-                      schema={schema}
+                      schema={widgetId === 'image' ? imageFormSchema(schema, section.key) : schema}
                       value={value}
                       onChange={write}
                       text={form.text}
@@ -458,14 +458,14 @@ export function CardComposer({
               ? <p className="dsh-widget-board__editor-empty">{t('formPreviewHint')}</p>
               : (
                 <div className="dsh-widget-board__composer-frame" data-size={previewFamily}>
-                  <WidgetPreview
+                  {widgetId === 'image' ? <ImageDraftPreview url={mediaPreview} props={props} data={data} /> : <WidgetPreview
                     id={`composer:${board.id}`}
                     widgetId={widgetId}
                     widget={previewWidget}
                     theme={theme}
                     frames={frames}
-                    content={widgetId === 'image' ? { props: { ...props, localImage: false }, data: { ...(data as Record<string, unknown>), src: mediaPreview ?? '' }, state } : { props, data, state }}
-                  />
+                    content={{ props, data, state }}
+                  />}
                 </div>
               )}
           </aside>
