@@ -10,7 +10,7 @@ export const isCampusSchema = (schema: unknown): boolean => schema !== null && t
 export const EMPTY_CAMPUS_STATE: CampusState = { schemaVersion: 1, items: [], links: [], customCategories: [], reminderLedger: {} }
 export const DEFAULT_CAMPUS_PROPS: CampusProps = {
   schoolPreset: 'generic', degree: 'master', genericTheme: 'book', customSchool: { name: '', shortName: '', iconAlt: '' },
-  backgroundPosition: { x: 50, y: 50 }, backgroundStrength: 12, timeZone: 'Asia/Shanghai', hasBackground: false, hasIcon: false, reminderEnabled: false, reminderLeadHours: 24,
+  backgroundPosition: { x: 50, y: 50 }, backgroundStrength: 12, timeZone: 'Asia/Shanghai', hasBackground: false, hasIcon: false, reminderEnabled: true, reminderLeadHours: 24,
 }
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value)
 export function safeLink(value: string): boolean {

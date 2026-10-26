@@ -2,6 +2,7 @@
 import { campusProps, campusState, campusSummary } from '@dsh-widget-board/model/campus/model'
 import { dueLabel, dueTone } from '@dsh-widget-board/model/campus/time'
 import { DEGREES, SCHOOLS } from '@dsh-widget-board/model/campus/presets'
+import { createCampusReminders } from './reminders'
 
 const widget = window.widget
 const card = document.querySelector('.campus')
@@ -14,6 +15,7 @@ let pending
 let pendingTimer
 let mediaController
 const urls = []
+const reminders = widget ? createCampusReminders(widget, feedback) : undefined
 
 function feedback(message) { field('feedback').textContent = message; field('feedback').hidden = !message }
 function releaseMedia() {
@@ -127,13 +129,14 @@ function render() {
 function schedule() {
   clearInterval(timer)
   render()
-  if (widget && !widget.paused) timer = setInterval(render, 60000)
+  reminders?.check()
+  if (widget && !widget.paused) timer = setInterval(() => { render(); reminders?.check() }, 60000)
 }
 card.querySelector('[data-action="add"]').onclick = () => requestManage('items')
 card.querySelector('[data-action="manage"]').onclick = () => requestManage('items')
 widget?.onProps(() => { schedule(); void loadMedia() })
-widget?.onState(() => { pending = undefined; clearTimeout(pendingTimer); feedback(''); render() })
+widget?.onState(() => { pending = undefined; clearTimeout(pendingTimer); feedback(''); render(); reminders?.check() })
 widget?.onSize(render)
 widget?.onPause(paused => { clearInterval(timer); if (paused) releaseMedia(); else { schedule(); void loadMedia() } })
-window.addEventListener('pagehide', () => { clearInterval(timer); clearTimeout(pendingTimer); releaseMedia() })
+window.addEventListener('pagehide', () => { clearInterval(timer); clearTimeout(pendingTimer); reminders?.dispose(); releaseMedia() })
 schedule()
