@@ -15,7 +15,9 @@
 
 「月历」与「今日运势」两个内置组件随目录带一份 **lunar-javascript**（MIT License，https://github.com/6tail/lunar-javascript），放在各自的 `vendor/` 下，经 manifest 的 `scripts` 内联进组件文档；农历、节气、干支与宜忌都由它算。文件原样保留，未做修改。
 
-四个库的版权归各自的作者所有；本插件只做打包与调用。
+CSV 读取与导出使用 **Papa Parse 5.7.0**（MIT，https://github.com/mholt/PapaParse）；ICS 解析、重复规则与标准序列化使用 **ical.js 2.2.1**（MPL-2.0，https://github.com/kewisch/ical.js）。两者构建进宿主半边，保留各自许可声明；ical.js 源文件没有修改，源代码可从对应版本的上游仓库取得。
+
+上述库的版权归各自的作者所有；本插件只做打包与调用。
 
 看板入口的未读通知徽标参考了 transitions.dev 的 **Notification badge**（作者 Jakub Antalík），按它的许可改写为本站的类名与令牌：
 

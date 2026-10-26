@@ -123,6 +123,8 @@ Runtime goes through the service: no value import of this plugin, no `dsh.client
 
 ## Status
 
+Campus management supports CSV/ICS import and export. Expand “CSV / ICS 文件交换”, select a UTF-8 file, confirm the column mapping, target time zone and duplicate decisions, then commit the import. Rows can be corrected or skipped. Files are limited to 2MiB and 10,000 candidates, with 100 items and 64KiB of state per card. Export filters include item type and completion status. The CSV template contains demonstration data; use board packages for complete backups.
+
 In development; 0.1.3 is on npm. The right sidebar, the widget library page, widget version history and sharing/import are still to come.
 
 ## License

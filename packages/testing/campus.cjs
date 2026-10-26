@@ -7,6 +7,7 @@ const { waitFor } = require('./road.cjs')
 const { setCardHeight } = require('./board.cjs')
 const sharp = require('sharp')
 const { captureAppearance } = require('./appearance.cjs')
+const { itemExchangePass } = require('./item-exchange.cjs')
 async function campusPass(page, check) {
   const evidence = path.resolve(__dirname, '../../.debug/evidence/T06')
   fs.mkdirSync(evidence, { recursive: true })
@@ -160,6 +161,7 @@ async function campusPass(page, check) {
       await card.scrollIntoViewIfNeeded()
       check(`校园卡 ${width}/${scheme} 按钮完整`, await frame.locator('[data-action="manage"]').evaluate(button => { const box = button.getBoundingClientRect(); return box.width > 0 && box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight }))
     })
+    await itemExchangePass(page, check, board, model.instance.props)
   } catch (error) {
     await page.screenshot({ path: path.join(evidence, 'failure.png') })
     throw error
