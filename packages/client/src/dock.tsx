@@ -64,6 +64,8 @@ export interface BoardDockProps {
   onTidy: () => void
   /** 主动重读组件库与运行时。 */
   onRefresh: () => void
+  /** 打开创建卡片（C01）。 */
+  onCreate: () => void
 }
 
 /** 一次从组件库开始的拖放。 */
@@ -77,8 +79,16 @@ interface AddDrag {
   active: boolean
 }
 
-/** 加号 / 整理 / 刷新三个图标。尺寸与线宽按参考的 16px 图标。 */
-function ActionIcon({ kind }: { kind: 'add' | 'tidy' | 'refresh' }): ReactNode {
+/** 创建 / 加组件 / 整理 / 刷新四个图标。尺寸与线宽按参考的 16px 图标。 */
+function ActionIcon({ kind }: { kind: 'create' | 'add' | 'tidy' | 'refresh' }): ReactNode {
+  if (kind === 'create') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h6L20 12.5 12.5 20 4 11.5Z" />
+        <path d="M9 9h.01" />
+      </svg>
+    )
+  }
   if (kind === 'add') {
     return (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -105,11 +115,12 @@ function ActionIcon({ kind }: { kind: 'add' | 'tidy' | 'refresh' }): ReactNode {
   )
 }
 
-/** 菜单的三个动作：位置照参考的扇面，i 决定展开的先后。 */
+/** 菜单的四个动作：位置照参考的扇面排成一段弧，i 决定展开的先后（C01 的入口）。 */
 const GOO_ACTIONS = [
-  { kind: 'add' as const, fx: '0px', fy: '-64px', i: 1 },
-  { kind: 'tidy' as const, fx: '-54px', fy: '-34px', i: 0 },
-  { kind: 'refresh' as const, fx: '54px', fy: '-34px', i: 2 },
+  { kind: 'create' as const, fx: '-17px', fy: '-62px', i: 0 },
+  { kind: 'add' as const, fx: '17px', fy: '-62px', i: 1 },
+  { kind: 'tidy' as const, fx: '-58px', fy: '-27px', i: 2 },
+  { kind: 'refresh' as const, fx: '58px', fy: '-27px', i: 3 },
 ]
 
 /**
@@ -118,8 +129,9 @@ const GOO_ACTIONS = [
  * 底色、桥接与投影都画在同一张 SVG 的 goo 滤镜里：先用高斯模糊与色阶把四个圆连成一片，
  * 再按参考的三层阴影把合并后的剪影投下来。图标与按钮是压在上面的清晰层，滤镜不碰文字。
  */
-function DockMenu({ busy, onAdd, onTidy, onRefresh }: {
+function DockMenu({ busy, onCreate, onAdd, onTidy, onRefresh }: {
   busy: boolean
+  onCreate: () => void
   onAdd: () => void
   onTidy: () => void
   onRefresh: () => void
@@ -175,6 +187,7 @@ function DockMenu({ busy, onAdd, onTidy, onRefresh }: {
   }, [close, open])
 
   const runs = {
+    create: onCreate,
     add: onAdd,
     tidy: onTidy,
     refresh: onRefresh,
@@ -305,6 +318,7 @@ export function BoardDock({
   onAddAt,
   onTidy,
   onRefresh,
+  onCreate,
 }: BoardDockProps): ReactNode {
   const dragRef = useRef<AddDrag | null>(null)
   const [session, setSession] = useState<{ entry: WidgetLibraryEntry, pointerId: number } | null>(null)
@@ -453,6 +467,7 @@ export function BoardDock({
       <div ref={dockRef}>
         <DockMenu
           busy={busy}
+          onCreate={() => { setProxy(null); onCloseLibrary(); onCreate() }}
           onAdd={() => { setProxy(null); onOpenLibrary() }}
           onTidy={onTidy}
           onRefresh={onRefresh}
@@ -471,6 +486,7 @@ export function BoardDock({
               onBeginDrag={beginDrag}
               onClose={onCloseLibrary}
               onImported={onRefresh}
+              onCreate={() => { onCloseLibrary(); onCreate() }}
             />
           </div>
         )

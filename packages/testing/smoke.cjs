@@ -22,6 +22,8 @@ const { dockPass } = require('./dock.cjs')
 const { openLibrary } = require('./library.cjs')
 const { groupPass } = require('./group.cjs')
 const { editorPass } = require('./editor.cjs')
+const { composerPass, contentPass, libraryEntryPass } = require('./composer.cjs')
+const { sourcePass } = require('./source.cjs')
 const { capabilityPass } = require('./capability.cjs')
 const { markdownPass } = require('./markdown.cjs')
 const { noticePass } = require('./notice.cjs')
@@ -449,13 +451,14 @@ async function sharePass(page) {
     return { exportStatus: exported.status, type: exported.headers.get('content-type'), bytes: bytes.byteLength, importStatus: imported.status, body: await imported.json() }
   }, id)
   check('导出的响应是 zip', roundTrip.exportStatus === 200 && roundTrip.type === 'application/zip' && roundTrip.bytes > 0, `${roundTrip.exportStatus} ${roundTrip.type} ${roundTrip.bytes}`)
-  // 导出的是内置组件：包能解开（否则报的是「不是有效的组件包」），但内置组件不许被覆盖（D8、D17）。
-  check('内置组件的包能解开但不会被覆盖', roundTrip.importStatus === 400 && String(roundTrip.body.error).includes('是内置的'), `${roundTrip.importStatus} ${JSON.stringify(roundTrip.body).slice(0, 80)}`)
+  // 导出的是内置组件：包能解开（否则报的是「不是有效的组件包」），但内置组件不许被覆盖
+  // （D8、D17）。技术契约 4 定的是 403：来源不允许与并发冲突分开说。
+  check('内置组件的包能解开但不会被覆盖', roundTrip.importStatus === 403 && String(roundTrip.body.error).includes('是内置的'), `${roundTrip.importStatus} ${JSON.stringify(roundTrip.body).slice(0, 80)}`)
 
   const board = await page.evaluate(async () => {
     const snapshot = await (await fetch('api/widget-board/boards')).json()
     const exported = await fetch(`api/widget-board/boards/${encodeURIComponent(snapshot.active)}/export`)
-    const pkg = await exported.json()
+    const pkg = await new Response(exported.body.pipeThrough(new DecompressionStream('gzip'))).json()
     return { status: exported.status, cards: Array.isArray(pkg.cards) ? pkg.cards.length : -1, widgets: Array.isArray(pkg.widgets) ? pkg.widgets.length : -1 }
   })
   check('看板导出带着卡片与用到的组件', board.status === 200 && board.cards > 0 && board.widgets > 0, JSON.stringify(board))
@@ -550,7 +553,7 @@ async function layoutPass(page) {
       && Math.abs(during.card.top - (startBox.y + 70)) <= 2
       && Math.abs(during.ghost.left - (startBox.x - metrics.step)) <= 2
       && Math.abs(during.ghost.top - (startBox.y + 64)) <= 2,
-    JSON.stringify(during),
+    JSON.stringify({ during, start: { left: startBox.x, top: startBox.y }, step: metrics.step }),
   )
   await page.mouse.up()
   const moved = await waitLayout(page, weatherId, (layout) => layout.x === 1 && layout.y > 0)
@@ -642,10 +645,9 @@ async function reloadPass(page) {
     check('改了组件文件后卡片按新哈希重挂', after !== '' && after !== before, after === '' ? '一直没换地址' : after.split('/widget/')[1]?.slice(0, 12))
     const frame = await frameOf(page, WEATHER_FRAME)
     check('重挂之后天气卡仍然画出来', await frame.evaluate(() => document.querySelector('.wx') !== null))
-    // 选中的是哪一天存在宿主上，重挂之后回来；文案与地点也要重新接上。
-    await sleep(600)
-    // 热重载可能让同一张卡再换一次地址：等落定之后重新取一次它的 frame，别握着已经拆掉的那一个。
+    // 重取热重载后的 frame，等待宿主恢复选中的预报日；文案与地点也要重新接上。
     const settledFrame = await frameOf(page, WEATHER_FRAME)
+    await settledFrame.waitForFunction(() => document.querySelector('.t-tab[aria-selected="true"]')?.id === 'wx-tab-3' && document.querySelector('#wx-day')?.textContent !== '—', null, { timeout: 10000 }).catch(() => {})
     const reloaded = await settledFrame.evaluate(() => ({
       place: document.querySelector('#wx-place')?.textContent,
       day: document.querySelector('#wx-day')?.textContent ?? '',
@@ -667,6 +669,7 @@ async function reloadPass(page) {
 async function reducedPass(page) {
   await page.waitForSelector(PANEL_ICON, { timeout: 120000 })
   await openBoard(page)
+  await page.locator(WEATHER_FRAME).scrollIntoViewIfNeeded()
   const weather = await frameOf(page, WEATHER_FRAME)
   check('根部标着减弱动效', (await weather.evaluate(() => document.documentElement.dataset.motion)) === 'reduced')
   const still = await weather.evaluate(() => ({
@@ -712,6 +715,10 @@ start({ home, extras: [join(__dirname, 'fixtures', 'provider')] }).then(async (h
     await addRemovePass(opened.page)
     await groupPass(opened.page, check)
     await editorPass(opened.page, check)
+    await composerPass(opened.page, check)
+    await libraryEntryPass(opened.page, check)
+    await contentPass(opened.page, check)
+    await sourcePass(opened.page, check)
     await capabilityPass(opened.page, check)
     await markdownPass(opened.page, check)
     await githubPass(opened.page, check)

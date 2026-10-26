@@ -1,5 +1,11 @@
 # 给DS的实施入口
 
+## 当前进度（2026-10-26）
+
+T07文件交换已实现并获用户视觉确认：最终完整verify退出0，521项单元、真实宿主冒烟和尺寸矩阵通过。原生专项23项通过；Claude主题功能23项通过，但三款字体404导致专项整体退出1，限制保留。详见 [T07-HANDOFF.md](T07-HANDOFF.md)。继续使用feat/campus-card；下一任务为T08，尚未激活。
+
+T04 已经用户确认验收通过，见 [T04-HANDOFF.md](T04-HANDOFF.md)。跨分支视觉统一、T00/T01/T02 完整补验已通过，见 [VISUAL-HANDOFF.md](VISUAL-HANDOFF.md)。T05 自动验收通过、视觉状态保持原记录，见 [T05-HANDOFF.md](T05-HANDOFF.md)。T06 已获用户浅深色确认，完整 verify 与完成关卡通过：511项单元、真实宿主冒烟和尺寸矩阵；原生及Claude主题专项各45项通过，见 [T06-HANDOFF.md](T06-HANDOFF.md)。
+
 ## 直接复制的开工指令
 
 ```text
