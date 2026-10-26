@@ -5,15 +5,29 @@
  * 只说明要用 JSON 工具写。组件声明的凭据混在同一张表里，输入的值只往宿主的凭据服务走，界面上只
  * 看得到状态。
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CardSettings, CredentialSetting, CredentialStatus, LocalizedText } from '@dsh-widget-board/contracts'
 import { isChinese, t, textOf } from './copy'
+import { fixOfCandidate, geocodeCity, locateCity } from './geocode'
+import type { CityFix } from './geocode'
+import { CityPicker, latitudeOf } from './city-picker'
 import { PropsRejectedError } from './snapshot'
 import type { PropsIssue } from './snapshot'
 
 /** 一行字段的种类。 */
 export type ConfigFieldKind = 'string' | 'number' | 'boolean' | 'enum' | 'complex'
+
+/**
+ * 一个城市字段解析出来的值分别写到哪几个 props。
+ *
+ * 写在 schema 的 `fills` 里：`place` 是双语地名，`latitude` 与 `longitude` 是坐标。
+ */
+export interface CityFills {
+  place?: string
+  latitude?: string
+  longitude?: string
+}
 
 /** 从 schema 里读出来的一个字段。 */
 export interface ConfigField {
@@ -23,12 +37,18 @@ export interface ConfigField {
   hint?: string
   required: boolean
   enumValues?: string[]
+  /** 每个枚举值的显示名，来自 manifest 的 `props.<key>.<value>`；缺的用原值。 */
+  enumLabels?: Record<string, string>
   min?: number
   max?: number
   maxLength?: number
   multiline?: boolean
   /** schema 里写的默认值：卡片没写这个字段时，控件把它当提示显示。 */
   defaultValue?: unknown
+  /** `format: "city"`：这个字段是一个城市名，可以按当前位置填上。 */
+  locate?: boolean
+  /** 解析出的地名与坐标写到哪里；省略时只把规范化后的名字写回这个字段。 */
+  fills?: CityFills
 }
 
 /** 一个普通对象。 */
@@ -74,6 +94,35 @@ function hintOf(key: string, text: Readonly<Record<string, LocalizedText>> | und
 }
 
 /**
+ * 取一个枚举值的显示名：manifest 的 `props.<key>.<value>`，没有再显示原值。
+ *
+ * @param key - 字段名。
+ * @param value - schema 里的枚举值。
+ * @param text - 组件的双语文案。
+ * @returns 当前语言下的显示名。
+ */
+function enumLabelOf(key: string, value: string, text: Readonly<Record<string, LocalizedText>> | undefined): string {
+  const fromText = text?.[`props.${key}.${value}`]
+  return fromText === undefined ? value : textOf(fromText)
+}
+
+/**
+ * 一个城市字段的 `fills`：解析出的地名与坐标各写到哪个 prop。
+ *
+ * @param value - schema 里的 `fills`。
+ * @returns 认得出的那几项；一项都没有时是 `undefined`。
+ */
+function cityFillsOf(value: unknown): CityFills | undefined {
+  if (!isRecord(value)) return undefined
+  const fills: CityFills = {}
+  for (const key of ['place', 'latitude', 'longitude'] as const) {
+    const target = value[key]
+    if (typeof target === 'string' && target !== '') fills[key] = target
+  }
+  return Object.keys(fills).length === 0 ? undefined : fills
+}
+
+/**
  * 一份 props schema 里的字段，按声明的次序。
  *
  * @param schema - manifest 的 `props`。
@@ -96,11 +145,28 @@ export function fieldsOf(
       fields.push({ key, kind: 'complex', label, ...(hint === undefined ? {} : { hint }), required: isRequired })
       continue
     }
+    // `format: "hidden"` 的字段不出控件：它们由设置界面或工具写（例如城市解析出的坐标），
+    // 不让人直接改，免得它和城市名各说各的。
+    if (raw.format === 'hidden') continue
     const enumValues = Array.isArray(raw.enum) && raw.enum.every((value) => typeof value === 'string')
       ? raw.enum as string[]
       : undefined
     if (enumValues !== undefined) {
-      fields.push({ key, kind: 'enum', label, ...(hint === undefined ? {} : { hint }), required: isRequired, enumValues, ...fallback })
+      const enumLabels: Record<string, string> = {}
+      for (const value of enumValues) {
+        const shown = enumLabelOf(key, value, text)
+        if (shown !== value) enumLabels[value] = shown
+      }
+      fields.push({
+        key,
+        kind: 'enum',
+        label,
+        ...(hint === undefined ? {} : { hint }),
+        required: isRequired,
+        enumValues,
+        ...(Object.keys(enumLabels).length === 0 ? {} : { enumLabels }),
+        ...fallback,
+      })
       continue
     }
     if (raw.type === 'boolean') {
@@ -122,6 +188,7 @@ export function fieldsOf(
     }
     if (raw.type === 'string') {
       const maxLength = typeof raw.maxLength === 'number' ? raw.maxLength : undefined
+      const fills = raw.format === 'city' ? cityFillsOf(raw.fills) : undefined
       fields.push({
         key,
         kind: 'string',
@@ -130,6 +197,8 @@ export function fieldsOf(
         required: isRequired,
         ...(maxLength === undefined ? {} : { maxLength }),
         ...((raw.format === 'textarea' || (maxLength ?? 0) > 200) ? { multiline: true } : {}),
+        ...(raw.format === 'city' ? { locate: true } : {}),
+        ...(fills === undefined ? {} : { fills }),
         ...fallback,
       })
       continue
@@ -182,6 +251,55 @@ function issueKey(issue: PropsIssue): string | undefined {
   return issue.path.slice(1).split('/')[0]
 }
 
+/**
+ * 数字字段的输入：编辑期间保留原文。
+ *
+ * 受控输入把每次改动立即解析回数字，「3.」「1e」这类中间写法会当场消失或清空字段。原文留在
+ * 本地：能解析时提交解析值，解析不了的原文留在框里接着编辑，失焦时回到草稿里的那一份。
+ */
+function NumberInput({ fieldKey, value, placeholder, min, max, disabled, onCommit }: {
+  fieldKey: string
+  value: number | undefined
+  placeholder: string | undefined
+  min: number | undefined
+  max: number | undefined
+  disabled: boolean
+  onCommit(next: number | undefined): void
+}): ReactNode {
+  /** 编辑中的原文；`null` 表示框里显示的就是草稿里的数。 */
+  const [text, setText] = useState<string | null>(null)
+  return (
+    <input
+      className="dsh-widget-board__input dsh-widget-board__input--number"
+      type="number"
+      data-dsh-widget-board-field={fieldKey}
+      value={text ?? (value === undefined ? '' : String(value))}
+      placeholder={placeholder}
+      min={min}
+      max={max}
+      step="any"
+      disabled={disabled}
+      onChange={(event) => {
+        const next = event.target.value
+        const parsed = Number(next)
+        if (next !== '' && Number.isFinite(parsed)) {
+          setText(null)
+          onCommit(parsed)
+          return
+        }
+        // 空串是「去掉这个键」；解析不了的中间写法留在框里，等它补全。
+        if (next === '') {
+          setText(null)
+          onCommit(undefined)
+          return
+        }
+        setText(next)
+      }}
+      onBlur={() => { setText(null) }}
+    />
+  )
+}
+
 /** 配置一节要画的东西。 */
 export interface ConfigPanelProps {
   settings: CardSettings
@@ -217,12 +335,20 @@ export function ConfigPanel({
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [locating, setLocating] = useState<string | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null)
+  /** 上一次定位或查城市解析出的结果：保存时同一个名字不必再查一遍。 */
+  const resolved = useRef<{ city: string, fix: CityFix } | null>(null)
 
-  // 宿主上的值变了（保存回来、别的页面改了）：清空草稿，跟着宿主走。
+  // 宿主上的值变了（保存回来、别的页面改了）：清空草稿，跟着宿主走。授权与撤销也会重取读模型，
+  // 哪怕值没变拿到的也是新对象：按内容比较，值没动就不清正在编辑的草稿。
+  const hostProps = JSON.stringify(settings.instance.props)
+  const hostPropsRef = useRef(hostProps)
   useEffect(() => {
+    if (hostPropsRef.current === hostProps) return
+    hostPropsRef.current = hostProps
     setDraft(settings.instance.props)
-  }, [settings.instance.props])
+  }, [hostProps, settings.instance.props])
 
   const propsDirty = JSON.stringify(draft) !== JSON.stringify(settings.instance.props)
   const secretsDirty = Object.values(secrets).some((value) => value !== '')
@@ -247,6 +373,33 @@ export function ConfigPanel({
     setSaved(false)
   }
 
+  /** 把解析好的城市写进草稿：名字回到它自己的字段，地名与坐标按 `fills` 写到别的字段上。 */
+  const applyFix = (field: ConfigField, fix: CityFix): void => {
+    setDraft((previous) => {
+      const copy = { ...previous, [field.key]: fix.city }
+      if (field.fills?.place !== undefined) copy[field.fills.place] = fix.place
+      if (field.fills?.latitude !== undefined) copy[field.fills.latitude] = fix.latitude
+      if (field.fills?.longitude !== undefined) copy[field.fills.longitude] = fix.longitude
+      return copy
+    })
+    resolved.current = { city: fix.city, fix }
+    setSaved(false)
+  }
+
+  /** 按当前位置给一个城市字段填上名字与坐标。 */
+  const locate = async (field: ConfigField): Promise<void> => {
+    if (locating !== null || saving || busy) return
+    setError(null)
+    setLocating(field.key)
+    try {
+      applyFix(field, await locateCity())
+    } catch (caught) {
+      setError((caught as Error).message)
+    } finally {
+      setLocating(null)
+    }
+  }
+
   /** 保存：先把 props 交上去，再把填了值的凭据逐项写进宿主的凭据服务。 */
   const save = async (): Promise<void> => {
     if (saving || busy || !dirty) return
@@ -254,7 +407,34 @@ export function ConfigPanel({
     setError(null)
     setSaving(true)
     try {
-      if (propsDirty) await onSaveProps(draft)
+      let next = draft
+      // 城市名改过、或地名与坐标还没填上时，先解析成坐标；解析不出来就不保存，免得城市名与
+      // 天气各说各的。
+      for (const field of fields) {
+        if (field.locate !== true) continue
+        const value = typeof draft[field.key] === 'string' ? (draft[field.key] as string).trim() : ''
+        const previous = typeof settings.instance.props[field.key] === 'string' ? (settings.instance.props[field.key] as string).trim() : ''
+        // 清空城市名：连带清掉上一次解析出的地名与坐标，卡片回到自己的默认地点。
+        if (value === '') {
+          if (previous === '') continue
+          next = { ...next }
+          delete next[field.key]
+          for (const target of [field.fills?.place, field.fills?.latitude, field.fills?.longitude]) {
+            if (target !== undefined) delete next[target]
+          }
+          continue
+        }
+        const missing = (field.fills?.latitude !== undefined && typeof next[field.fills.latitude] !== 'number')
+          || (field.fills?.longitude !== undefined && typeof next[field.fills.longitude] !== 'number')
+        if (value === previous && !missing) continue
+        const fix = resolved.current !== null && resolved.current.city === value ? resolved.current.fix : await geocodeCity(value)
+        next = { ...next, [field.key]: fix.city }
+        if (field.fills?.place !== undefined) next[field.fills.place] = fix.place
+        if (field.fills?.latitude !== undefined) next[field.fills.latitude] = fix.latitude
+        if (field.fills?.longitude !== undefined) next[field.fills.longitude] = fix.longitude
+        resolved.current = { city: fix.city, fix }
+      }
+      if (propsDirty || next !== draft) await onSaveProps(next)
       for (const [ref, value] of Object.entries(secrets)) {
         if (value === '') continue
         await onSetCredential(ref, value)
@@ -321,7 +501,7 @@ export function ConfigPanel({
                     onChange={(event) => { update(field.key, event.target.value === '' ? undefined : event.target.value) }}
                   >
                     <option value="">—</option>
-                    {(field.enumValues ?? []).map((item) => <option key={item} value={item}>{item}</option>)}
+                    {(field.enumValues ?? []).map((item) => <option key={item} value={item}>{field.enumLabels?.[item] ?? item}</option>)}
                   </select>
                 )
                 : field.kind === 'boolean'
@@ -344,21 +524,14 @@ export function ConfigPanel({
                   })()
                   : field.kind === 'number'
                     ? (
-                      <input
-                        className="dsh-widget-board__input dsh-widget-board__input--number"
-                        type="number"
-                        data-dsh-widget-board-field={field.key}
-                        value={typeof raw === 'number' ? String(raw) : ''}
+                      <NumberInput
+                        fieldKey={field.key}
+                        value={typeof raw === 'number' ? raw : undefined}
                         placeholder={typeof field.defaultValue === 'number' ? String(field.defaultValue) : undefined}
                         min={field.min}
                         max={field.max}
-                        step="any"
                         disabled={saving || busy}
-                        onChange={(event) => {
-                          const next = event.target.value
-                          const parsed = Number(next)
-                          update(field.key, next === '' || !Number.isFinite(parsed) ? undefined : parsed)
-                        }}
+                        onCommit={(next) => { update(field.key, next) }}
                       />
                     )
                     : field.kind === 'string'
@@ -374,18 +547,34 @@ export function ConfigPanel({
                             onChange={(event) => { update(field.key, event.target.value === '' ? undefined : event.target.value) }}
                           />
                         )
-                        : (
-                          <input
-                            className="dsh-widget-board__input"
-                            type="text"
-                            data-dsh-widget-board-field={field.key}
-                            maxLength={field.maxLength}
-                            value={typeof raw === 'string' ? raw : ''}
-                            placeholder={typeof field.defaultValue === 'string' ? field.defaultValue : undefined}
-                            disabled={saving || busy}
-                            onChange={(event) => { update(field.key, event.target.value === '' ? undefined : event.target.value) }}
-                          />
-                        )
+                        : field.locate === true
+                          ? (
+                            <CityPicker
+                              field={field}
+                              value={typeof raw === 'string' ? raw : ''}
+                              resolved={typeof draft[field.fills?.place ?? ''] === 'object' && draft[field.fills?.place ?? ''] !== null
+                                ? draft[field.fills?.place ?? ''] as { zh?: unknown, en?: unknown }
+                                : undefined}
+                              coordinates={latitudeOf(draft, field)}
+                              disabled={saving || busy}
+                              locating={locating === field.key}
+                              onChange={(next) => { update(field.key, next === '' ? undefined : next) }}
+                              onPick={(candidate) => { applyFix(field, fixOfCandidate(candidate)) }}
+                              onLocate={() => { void locate(field) }}
+                            />
+                          )
+                          : (
+                            <input
+                              className="dsh-widget-board__input"
+                              type="text"
+                              data-dsh-widget-board-field={field.key}
+                              maxLength={field.maxLength}
+                              value={typeof raw === 'string' ? raw : ''}
+                              placeholder={typeof field.defaultValue === 'string' ? field.defaultValue : undefined}
+                              disabled={saving || busy}
+                              onChange={(event) => { update(field.key, event.target.value === '' ? undefined : event.target.value) }}
+                            />
+                          )
                       : <span className="dsh-widget-board__row-desc">{isChinese() ? '用 JSON 工具写' : 'Edit with JSON tools'}</span>}
             </div>
           </div>

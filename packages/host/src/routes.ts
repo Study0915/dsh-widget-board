@@ -10,10 +10,9 @@
  * 与组的 id 全工作区唯一（D21）。
  */
 import { randomUUID } from 'node:crypto'
+import { arrangementRoutes } from './arrangement-routes'
 import type {
-  Arrangement,
   Board,
-  BoardArrangementRequest,
   BoardCreateRequest,
   BoardEvent,
   BoardInstance,
@@ -70,15 +69,16 @@ import { Refusal } from './refusal'
 import { shareRoutes } from './share'
 import type { SelfChecks } from './selfcheck'
 import { selfCheckRoutes } from './selfcheck'
-import { StaleRevisionError, arrangementUnitOf, defaultBoxOf, groupUnitOf, isArrangement, withArrangementUnits, withBoardArrangement, withBoardLayouts, withGroupAdded, withGroupRemoved, withInstanceAdded, withInstanceData, withInstanceRemoved, withInstanceStateChecked } from './state'
+import { StaleRevisionError, arrangementUnitOf, defaultBoxOf, groupUnitOf, withArrangementUnits, withBoardLayouts, withGroupAdded, withGroupRemoved, withInstanceAdded, withInstanceData, withInstanceRemoved, withInstanceStateChecked } from './state'
 import type { RateLimiter } from './limits'
+import { visibilityRoutes } from './visibility'
 import type { SaveOptions, Workspace } from './workspace'
 
 /** 卡片状态的请求体上限：界面状态只是几张表单的值，几 KB 足够。 */
 const STATE_LIMIT = 16 * 1024
 
 /** 一次布局提交的上限：一整块看板的卡片盒子，比单张卡的状态大一些。 */
-const LAYOUT_LIMIT = 64 * 1024
+export const LAYOUT_LIMIT = 64 * 1024
 
 /** 加一张卡的请求体上限。 */
 const ADD_LIMIT = 32 * 1024
@@ -200,17 +200,6 @@ function isBoardLayoutRequest(value: unknown): value is BoardLayoutRequest {
   return Number.isSafeInteger(layoutRevision) && (layoutRevision as number) >= 0 && isRecord(layouts)
 }
 
-/**
- * 一份排列偏好提交的外形：期望的布局修订号是非负整数，排列偏好由状态层逐项校验（D29）。
- *
- * @param value - 解出来的请求体。
- * @returns 可以当 `BoardArrangementRequest` 用时为真。
- */
-function isBoardArrangementRequest(value: unknown): value is BoardArrangementRequest {
-  if (!isRecord(value)) return false
-  const { expectedLayoutRevision, arrangement } = value
-  return Number.isSafeInteger(expectedLayoutRevision) && (expectedLayoutRevision as number) >= 0 && isArrangement(arrangement)
-}
 
 /**
  * 一块看板。
@@ -220,7 +209,7 @@ function isBoardArrangementRequest(value: unknown): value is BoardArrangementReq
  * @returns 那块看板。
  * @throws {Refusal} 没有这块看板。
  */
-function boardById(context: RouteContext, id: string): Board {
+export function boardById(context: RouteContext, id: string): Board {
   if (!context.workspace.has(id)) throw new Refusal(404, `没有这块看板：${id}`)
   return context.workspace.board(id)
 }
@@ -331,7 +320,7 @@ const ROUTES: Route[] = [
           id,
           (current) => {
             // 自由坐标只属于自由模式：看板已经换成整齐行列时，过时的自由提交整体退回，
-            // 让页面按当前快照重画，避免两种客户端互相覆盖（D29、技术契约2）。
+            // 让页面按当前快照重画，避免两种客户端互相覆盖（D30、技术契约2）。
             if (current.arrangement?.mode === 'aligned') throw new StaleRevisionError(body.layoutRevision, current.layoutRevision)
             return withBoardLayouts(current, layouts, (widget) => context.records.get(widget)?.manifest.minBox)
           },
@@ -345,37 +334,6 @@ const ROUTES: Route[] = [
           },
         )
         json(response, 200, { layoutRevision: next.layoutRevision, layouts: saved })
-      } catch (error) {
-        if (error instanceof StaleRevisionError) {
-          json(response, 409, workspaceSnapshot(context))
-          return
-        }
-        throw error
-      }
-    },
-  },
-  {
-    method: 'POST',
-    pattern: /^\/boards\/([^/]+)\/arrangement$/,
-    limit: LAYOUT_LIMIT,
-    async handle(context, request, response, match) {
-      const id = decodeURIComponent(match[1] as string)
-      boardById(context, id)
-      const body = await readJson(request, LAYOUT_LIMIT)
-      if (!isBoardArrangementRequest(body)) throw new Refusal(400, '排列提交的形状不对：需要 expectedLayoutRevision 与 arrangement')
-      const wanted = body.arrangement
-      try {
-        let saved: Arrangement = wanted
-        const next = await context.workspace.save(id, (current) => {
-          const changed = withBoardArrangement(current, wanted)
-          saved = changed.arrangement as Arrangement
-          return changed
-        }, {
-          expectedLayoutRevision: body.expectedLayoutRevision,
-          layoutChanged: true,
-          event: (savedBoard, board) => ({ type: 'arrangement', board, layoutRevision: savedBoard.layoutRevision, arrangement: savedBoard.arrangement as Arrangement }),
-        })
-        json(response, 200, { layoutRevision: next.layoutRevision, arrangement: saved })
       } catch (error) {
         if (error instanceof StaleRevisionError) {
           json(response, 409, workspaceSnapshot(context))
@@ -415,7 +373,7 @@ const ROUTES: Route[] = [
         ...(wanted.props === undefined ? {} : { props: wanted.props }),
         ...(wanted.layout === undefined ? {} : { layout: wanted.layout }),
       }
-      // 排列单元的初始盒子来自组件的 defaultBox；整齐模式的新卡接在顺序末尾（D29）。
+      // 排列单元的初始盒子来自组件的 defaultBox；整齐模式的新卡接在顺序末尾（D30）。
       const box = defaultBoxOf(record)
       await context.workspace.save(boardId, (current) => withArrangementUnits(withInstanceAdded(current, record, options, id).board, [], [{ id, box }]), {
         layoutChanged: true,
@@ -427,10 +385,10 @@ const ROUTES: Route[] = [
         // 写入之后重新取那一块看板：新卡片是这次写入加进去的，先前读到的那一份里没有它。
         const board = context.workspace.board(boardId)
         const instance = faceOf(board, id)
-        // 第一次读也要过授权，和 /read 走同一条规则：没人在卡片上给出「允许」之前不能跑（D6）。
-        requireGrant(grantFacts(context, board), id, 'source', source, resolved.registration.permission, resolved.provider)
-        // 请求本身失败（网络之类）不该让加卡失败：卡片留着，界面按空数据画，原因写进日志。
         try {
+          // 第一次读也要过授权，和 /read 走同一条规则：没人在卡片上给出「允许」之前不能跑（D6）。
+          // 缺授权也算读失败的一种：卡片照加、数据留空，用户在卡片上给出「允许」之后再读就有数据了。
+          requireGrant(grantFacts(context, board), id, 'source', source, resolved.registration.permission, resolved.provider)
           const data = await context.sources.readSource(source, instance)
           await saveData(context, id, data)
         } catch (error) {
@@ -458,7 +416,7 @@ const ROUTES: Route[] = [
       await context.workspace.save(boardId, (current) => {
         const added = withGroupAdded(current, front, back, wanted.layout === undefined ? {} : { layout: wanted.layout })
         id = added.id
-        // 组在整齐偏好里占一格，单元 id 是正面实例的 id（D29）；盒子取落点或组默认。
+        // 组在整齐偏好里占一格，单元 id 是正面实例的 id（D30）；盒子取落点或组默认。
         return withArrangementUnits(added.board, [], groupUnitOf(added.board, id))
       }, { layoutChanged: true, event: () => ({ type: 'board' }) })
       json(response, 201, { id, snapshot: workspaceSnapshot(context) })
@@ -474,8 +432,12 @@ const ROUTES: Route[] = [
       const wanted = body as unknown as GroupRemoveRequest
       const board = context.workspace.findGroup(wanted.group)
       if (board === undefined) throw new Refusal(404, `看板上没有这一组：${wanted.group}`)
-      // 整组离开时它的排列单元一起离开（D29）。
+      // 整组离开时它的排列单元一起离开（D30）。
       await context.workspace.save(board.id, (current) => withArrangementUnits(withGroupRemoved(current, wanted.group), [arrangementUnitOf(current, current.instances.find((instance) => instance.group?.id === wanted.group) as BoardInstance)], []), { layoutChanged: true, event: () => ({ type: 'board' }) })
+      // 组里的卡一起走了，它们的请求日志跟着收掉（D28）。
+      for (const instance of board.instances.filter((instance) => instance.group?.id === wanted.group)) {
+        context.requests.drop(instance.id)
+      }
       json(response, 200, workspaceSnapshot(context))
     },
   },
@@ -610,20 +572,13 @@ const ROUTES: Route[] = [
       const id = decodeURIComponent(match[1] as string)
       const { board } = locate(context, id)
       await readJson(request, EMPTY_LIMIT)
-      // 这张卡代表的排列单元（组卡是整组）一起离开（D29）。
+      // 这张卡代表的排列单元（组卡是整组）一起离开（D30）。
       await context.workspace.save(board.id, (current) => {
         const unit = arrangementUnitOf(current, current.instances.find((instance) => instance.id === id) as BoardInstance)
         return withArrangementUnits(withInstanceRemoved(current, id), [unit], [])
       }, { layoutChanged: true, event: () => ({ type: 'board' }) })
+      context.requests.drop(id)
       json(response, 200, workspaceSnapshot(context))
-    },
-  },
-  {
-    method: 'GET',
-    pattern: /^\/events$/,
-    limit: 0,
-    async handle(context, _request, response) {
-      context.live.subscribe(response)
     },
   },
   {
@@ -737,7 +692,7 @@ export function createHandler(context: RouteContext): (req: HostRequest, res: Ho
     }
     const url = new URL(request.url ?? '/', 'http://board.invalid')
     const path = url.pathname.startsWith(PLUGIN_ROUTE) ? url.pathname.slice(PLUGIN_ROUTE.length) : ''
-    const matched = [...ROUTES, ...shareRoutes(context), ...settingsRoutes(), ...groupRoutes(), ...capabilityRoutes(), ...contentRoutes(context), ...itemImportRoutes(context), ...mediaRoutes(), ...selfCheckRoutes(), ...sourceRoutes(context), ...draftRoutes(context.drafts), ...previewRoutes(context.previews)].flatMap((route) => {
+    const matched = [...ROUTES, ...arrangementRoutes(), ...shareRoutes(context), ...settingsRoutes(), ...groupRoutes(), ...capabilityRoutes(), ...contentRoutes(context), ...itemImportRoutes(context), ...mediaRoutes(), ...selfCheckRoutes(), ...sourceRoutes(context), ...draftRoutes(context.drafts), ...previewRoutes(context.previews), ...visibilityRoutes()].flatMap((route) => {
       const match = route.pattern.exec(path)
       return match === null ? [] : [{ route, match }]
     })
@@ -759,8 +714,8 @@ export function createHandler(context: RouteContext): (req: HostRequest, res: Ho
         return
       }
       const message = error instanceof Error ? error.message : String(error)
-      // 卡片或看板在核对与写入之间被另一个窗口移除了：这是 404，不是服务器的故障。
-      if (/^看板上没有这张卡/.test(message) || /^没有这块看板/.test(message)) {
+      // 卡片、组或看板在核对与写入之间被另一个窗口移除了：这是 404，不是服务器的故障。
+      if (/^(看板上没有这张卡|看板上没有这一组|没有这块看板)/.test(message)) {
         json(response, 404, { error: message })
         return
       }

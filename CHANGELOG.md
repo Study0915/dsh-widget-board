@@ -10,11 +10,8 @@
 
 <h3 id="cn-unreleased">新增功能</h3>
 
-- 新增内置组件「今日宜休」：按卡片设置里的 GitHub 令牌认账号，列出这个账号名下还开着的 issue，带仓库、编号、标签与开了几天；点一行就在新标签页里打开那一条。组件自己不能导航，跳转交给宿主页面完成。
 - 看板多出第二种排列：整齐行列。卡片按保存的顺序逐行铺开，同一排的卡片等高，行列间距一致；期望的跨列数与高度存在看板上，像素坐标每次按当前窗口宽度与根字号现算，窗口变宽变窄都不用重新摆。看板数据格式升到版本 3，旧看板读出来仍是自由位置，新建的看板默认用整齐行列。下方菜单多一枚「排列模式」：一键在两种排法之间切换，第一次切到整齐时把屏幕上的阅读顺序存下来，再切回去还是那份自由位置。整齐模式里拖动是调整顺序，缩放横向改自己的跨列数、纵向把整行抬到同一档；卡片与组卡的增删会同步维护顺序。布局与排列共用一套修订号并发规则，两个窗口同时改时后到的提交收到 409 与当前快照。
 - 看板上可以直接创建与编辑卡片内容：下方菜单与组件库头部多了「创建卡片」，选一个模板（文本笔记、待办清单、常用链接、日期倒计时，或从组件库里挑任意组件）之后按组件自己声明的 schema 填内容，右边是真实的渲染预览，一次提交才建出实例。表单能编辑字符串、数字、布尔、枚举、日期、时刻、多层的对象与数组；数组项可以加、删、上下移动，表单不支持的写法给一个显式的 JSON 入口并说明原因。卡片设置里多了「编辑内容」，按读到的修订号保存，冲突时保留输入并给出重新读取与另存为新卡片两条路。宿主新增 `POST /boards/<id>/compose`、`GET|POST /instance/<id>/content` 与 `GET /library/<id>/form` 三条人工内容路由，请求体 128KiB，props、data 与 state 分别按 schema 校验，单卡状态、整板状态与握手消息的额度各报一次。
-- 新增内置组件「运行成本」：左边是宿主进程的常驻内存，右边是一块机器体检面板——堆与外部内存、系统内存、CPU 核数与负载、看板数据所在卷的磁盘余量、系统版本，外加卡片数、状态序列化总量、文档体积与组件库规模，最近 60 次采样画成折线。面板上的「再测一次」由宿主经同一条读取路径重读一次。数据源 `widget-board:system.metrics` 只读宿主自己的内存、机器读数与工作区，没有观众时不采样；卡片离开视口或页面隐藏时停止绘制与状态写入。矮盒子里保留四行带条形图的读数，堆、系统内存、CPU 与磁盘始终看得到。
-- 组件可以把链接交给宿主打开：`widget.open(url)` 发一条桥消息，由宿主页面在新标签页里开出这一页，协议只限 http 与 https。沙箱仍然不给导航与弹窗，组件拿到的只是「请宿主开一个网页」这一件事；会话里内联显示的卡片同样可用。
 - 新增内置组件「日期倒计时」：名称、日期、时刻、全天、时区与一行备注，读成距目标还有几天几时几分，到点之后改成已经过去的说法。目标时刻按指定时区的墙上时间换算，换算只借 `Intl.DateTimeFormat`，不引时区表；时区名读不出来时退回本地时区并在卡片上说明。分钟精度，每 15 秒重算一次，暂停时停掉计时器。
 - 新增按需加载的源码编辑器、独立草稿和真实沙箱预览。源码默认另存为独立用户组件，可保留当前卡片的内容与布局；明确选择更新全部实例后按 expectedHash 检查并发。组件写入、工具和导入共用来源保护与目录交换，二进制资源保持原字节。预览只更新局部状态，拒绝正式动作、能力调用和通知，并在关闭或过期时释放。
 - 创建器支持本地图片：受限解码、静态 WebP、按实例归属的分块读取与完整看板媒体备份；旧看板包继续可读。
@@ -24,11 +21,6 @@
 
 ### 体验优化
 
-- 月历重做：日期格第二行写农历，按「节气 → 节日 → 初一写月名 → 农历日」取一条，节气与节日各有颜色；日期格的字按格子的实际宽高算出来，一到四列、六到三十行的盒子各有自己的排版，宽盒子里日程写成条目，很矮的盒子只留网格；卡片没有数据时不编样例日程，格子里不会冒出假的安排。新增内置组件「今日运势」：分数只由当天的黄道黑道、建除十二值星、星宿吉凶与宜忌条数加权，同一天永远同一个数，另排日期、农历、节气、建除、星宿、值神与当天的宜忌。组件组换成「日历组」：正面月历、背面今日运势，共用一个盒子，右上角的翻面按钮换面；换面不再接管指针，月历自己的翻月按钮因此点得动。组件格式新增 `scripts`，随组件发布的第三方库放在 `vendor/` 下。
-- 设置页的看板列表可以移除全部看板：移除最后一块时宿主补一块空的「未命名看板」并选中它，看板页始终有一块可以显示。
-- 天气卡改成「窗外是一幅画，卡片是它前面的一层玻璃」。晴天与多云是一幅清朗的窗景：蓝天、太阳或月亮、一朵朵有体积的积云——云面沿受光方向从亮到暗，鼓出来的地方有高光，上缘一道受光的亮边，日月从云后透出一圈光；云飘在城市后面，画面不闪。夜里换成月亮与满天星，晴朗的夜空里月亮不会被云盖住。阴天从多云里分出来，有了自己的天空。下雨下雪时，水珠落在玻璃上长大、顺着玻璃滑下并留下水痕，每颗大水珠真折射出它身后的世界；水珠会一直补足，长时间开着也不会滚空。雷暴另有闪电，两三秒一次，一亮一暗再补一下。组件格式新增 `scripts`：组件可以把逻辑按职责拆成目录里的多份脚本。
-- 卡片设置弹窗改成三节：配置、日志、关于。配置一节是一张两列的表，字段按组件自己声明的类型出输入框、数字、开关或下拉，组件声明的凭据与它们排在一起，值由宿主保存、界面只显示状态。日志一节列出这张卡对外的每一次请求（方法、主机与路径、状态与耗时）。内置组件去掉了「标题」「眉题」这类只换一行字的占位字段，剩下的字段补上了中英文名字。
-- 「今日宜休」按 GitHub 工作台那种排法重画：一行三段——左边状态点，中间标题加副行（仓库、编号、谁开的、标签、回复数），右边一列写「更新」与其下的时刻；标签用 GitHub 自带的颜色，列表上方多一行开放数。能力回的结果随之加上「最后更新时刻」「作者」与带颜色的标签。
 - 统一卡片与编辑界面的宿主字体、正文层级和留白；普通正文在宽高变化时保持字号，紧凑盒子使用同一套内边距与标题档位。补充共享视觉契约和真实沙箱排版检查，保留时钟、倒计时主读数与图表的专用比例。
 - 看板标签就地管理：每块标签右边多一个更多按钮，悬停或键盘聚焦时出现，右键标签也打开同一张菜单。菜单里可以给这块看板改名或删掉它，从别的标签打开不切换当前看板，关掉之后焦点回到按下的那枚按钮。改名弹窗预填当前名字，空名字就地报错，上限八十个字符（界面与宿主读同一份判定），中文输入法组合期间的回车不提交，保存失败时输入原样留在框里。删除确认写出看板标题、几格与几张卡片，删的是最后一块时说明会补一块空的；删掉哪一块之后显示哪一块由宿主决定。
 
@@ -36,15 +28,11 @@
 
 - 演示宿主补齐卡片请求日志读取：已有卡片返回空日志与统一条数上限，未知卡片仍返回 404，避免打开卡片设置时出现缺失路由错误。
 - 创建卡片与编辑内容弹窗补齐间距令牌，恢复表单、模板和预览的留白；输入控件统一使用宿主字体与正文行距。
-- 月历与翻页时钟在矮盒子里不再被截断：盒子落到 6rem 高时，月历收掉导航按钮与星期行、把日期数字收小，翻页时钟的字号下界跟着盒子高度收小。尺寸矩阵的纵向截断判据下全部组件通过。DSH 余额卡的读数改成始终保留两位小数、十亿起只留整数并标近似号，窄盒子放不下时依次收货币代码、收紧一档、折行；卡片多一个可选的标签（kicker）。
 
 <h3 id="en-unreleased">New Features</h3>
 
-- New built-in widget "Rest today": uses the GitHub token from the card settings to find the account and lists the open issues on its repositories, with repository, number, labels and age; clicking a row opens it in a new tab. Widgets cannot navigate themselves, so the host page opens the link.
 - The board gains a second arrangement: aligned rows. Cards flow row by row in a saved order; cards in the same row share one height and the row/column gaps match. Only the wanted column span and height tier are stored — pixel positions derive from the current window width and root font size, so resizing never asks you to re-arrange. The board format moves to version 3: existing boards stay free-positioned, new boards start aligned. The dock menu gains an arrangement toggle; switching to aligned captures the on-screen reading order once, and switching back restores the saved free positions. In aligned mode dragging reorders cards, horizontal resize changes the card's own span, vertical resize lifts the whole row one tier; adding or removing cards keeps the order intact. Layout and arrangement share one revision-based concurrency rule: a late submission from another window gets a 409 with the current snapshot.
 - Cards can be created and edited on the board: the dock menu and the library header gain "Create card", which picks a template (text note, to-do list, bookmarks, date countdown, or any widget from the library) and fills in what the widget's own schema declares, with a real rendered preview; the instance is written in one submit. The form edits strings, numbers, booleans, enums, dates, times, nested objects and arrays; array items can be added, removed and reordered, and schemas the form cannot render get an explicit JSON editor with the reason. The card settings gain "Edit content", which saves against the revision it read, keeps the input on conflict, and offers reload or save-as-new-card. The host gains three human content routes — `POST /boards/<id>/compose`, `GET|POST /instance/<id>/content` and `GET /library/<id>/form` — with a 128KiB body limit, per-schema checks for props, data and state, and separate reports for the single-card, whole-board and handshake budgets.
-- New built-in widget "Running cost": the host process's resident memory on the left and a machine check panel on the right — heap and external memory, system memory, CPU cores and load, free space on the volume holding board data, and the OS version, plus card count, serialized state size, document weight and library size, with the last 60 samples drawn as a sparkline. The panel's "Measure again" button asks the host to reread through the same path. The `widget-board:system.metrics` source reads only the host's own memory, machine readings and workspace; it samples nothing without an audience and stops drawing and writing state when the card leaves the viewport or the page is hidden. Short boxes keep four rows with bars, so heap, system memory, CPU and disk stay visible.
-- Widgets can hand a link to the host: `widget.open(url)` sends one bridge message and the host page opens it in a new tab, limited to http and https. The sandbox still grants no navigation or popups — a widget only gets to ask the host to open a page, and inline cards in a session can do it too.
 - New built-in widget "Countdown": name, date, time, all-day, time zone and a line of note, read as days, hours and minutes to the target and as how long ago it was once it passes. The target is converted from wall time in the chosen zone using `Intl.DateTimeFormat` only, with no time-zone table; an unknown zone name falls back to local time and says so on the card. Minute precision, recomputed every 15 seconds, with the timer stopped while paused.
 - Add an on-demand source editor, independent drafts and a real sandbox preview. Save source as a separate user type while retaining the current card's content and layout; explicitly updating all instances checks expectedHash. Definition, tool and import paths share source protection and directory replacement, preserving binary resource bytes. Preview updates local state only, rejects formal actions, capability calls and notifications, and releases sessions on close or expiry.
 - Create local image cards with bounded decoding, static WebP, instance-owned chunked reads and board media backups; older board packages remain readable.
@@ -54,11 +42,6 @@
 
 ### Improvements
 
-- The month calendar is redone: the second line of every day carries the lunar date, picked as solar term, then festival, then the month name on the first day, then the lunar day, with terms and festivals coloured; the type in a day cell is derived from the cell's measured width and height, so one to four columns and six to thirty rem boxes each get their own layout, a wide box writes plans out as bars and a very short box keeps the grid alone, and a card without data invents no sample plans, so no fake entries appear in the cells. New built-in widget "Today's fortune": the score is weighted only by the day's auspicious or inauspicious deity, the twelve duty officers, the mansion's luck and the length of the almanac lists, so the same day always scores the same, beside the date, lunar date, solar terms, duty officer, mansion, deity and the day's do and avoid lists. The default group is now the calendar group: a month calendar on the front and today's fortune on the back sharing one box, flipped by the button in the top right corner; flipping no longer takes the pointer, so the calendar's own month buttons stay clickable. The widget format gained `scripts`, and a third-party library shipped with a widget lives under `vendor/`.
-- The board list in settings can now remove every board: removing the last one leaves a fresh empty "Untitled board" selected, so the board page always has one to show.
-- The weather card is now a view outside a window with the card as the glass in front of it. Clear and cloudy days are a crisp window view: blue sky, a sun or moon, and cumulus clouds with real volume — each cloud shades from lit to shadowed along the light direction, its bumps catch highlights, its upper edge carries a lit rim, and the sun or moon bleeds a glow through it. The clouds drift behind the city and nothing strobes. At night the moon and stars take over, and a clear night leaves the moon unobstructed. Overcast is its own sky rather than a shade of cloudy. In rain and snow, droplets land on the glass, grow, slide down leaving wet trails, and the large ones genuinely refract the world behind them; the glass keeps replenishing its droplets, so it never runs dry however long the card stays open. A thunderstorm adds lightning every two or three seconds, a bright strike with a second, fainter pulse. The widget format gained `scripts`, so a widget can split its logic into several files by responsibility.
-- The card settings dialog now has three sections: configuration, log and about. Configuration is a two-column table — each field gets a text input, number input, switch or dropdown according to the type the widget declares, and the widget's credentials sit in the same table, stored by the host with only their status on screen. The log section lists every request the card makes, with method, host and path, status and time. Built-in widgets dropped the placeholder title/kicker fields, and the remaining fields gained labels.
-- The Rest today card is redrawn after the GitHub workbench layout: each row has a state dot on the left, the title plus a sub line (repository, number, author, labels, replies) in the middle, and an "Updated" column with the time on the right; labels keep their GitHub colors, and a count line sits above the list. The capability result now carries the last-updated time, the author, and colored labels.
 - Unify host fonts, body hierarchy and spacing across cards and editors. Ordinary text keeps its size as the box grows, and compact boxes share padding and heading levels. Add a shared visual contract and real-sandbox typography checks while retaining specialized clock, countdown and chart proportions.
 - Boards are managed right on their tabs: each tab gains a more button that appears on hover or keyboard focus, and right-clicking the tab opens the same menu. Rename or delete the board from there without switching to it; closing the menu returns focus to the button that opened it. The rename dialog is prefilled with the current name, reports an empty name in place, caps it at 80 characters (one rule shared by the UI and the host), never submits the Enter that confirms an IME composition, and keeps what you typed when saving fails. The delete confirmation names the board, its cells and its cards, says so when it is the last board, and leaves the host to decide which board shows afterwards.
 
@@ -66,7 +49,142 @@
 
 - Add request-log reads to the demo host: existing cards return an empty log with the shared entry limit, while unknown cards return 404, avoiding missing-route errors when opening card settings.
 - Restore spacing tokens in the card composer and content editor so forms, templates and previews retain their padding and gaps; use the host font and consistent body line height for inputs.
+
+## [0.1.6] - 2026-10-26
+
+[中文](#cn-0.1.6) | [English](#en-0.1.6)
+
+<h3 id="cn-0.1.6">新增功能</h3>
+
+- 新增内置组件「开关灯」：一盏台灯，按底座上的开关在日间与夜间之间切换，窗外的太阳、月亮、星点与灯下的光束一起变化。切换经通用的 dsh.theme 能力完成；浏览器半边把整页的新配色从灯下的一点以圆点展开，旧画面留在圆外，卡片里的波纹与整页圆点共用按下点，并且等新配色落到卡片时才一起开始；圆心与半径用百分比写，1.5 倍像素密度的桌面上也不会偏向左上角。旧快照拍完后暂停其它卡片的逐帧绘制，转场结束分批恢复，按下的一刻其它卡片不会被提前停住；浏览器不支持 View Transitions 或系统要求减弱动效时退回直接切换。宿主半边也能读改写主题偏好，作为兜底。
+- 天气卡新增六座城市街景：北京国贸 CBD（中国尊、国贸三期）、上海陆家嘴（东方明珠、三件套、江面）、纽约曼哈顿、东京涩谷、伦敦金融城与赛博霓虹峡谷；每座城有媒体立面、动画广告屏、霓虹招牌、人流与车流，按城市自动出现，也能在设置里直接指定。
+- 六座城市的街景不再用同一条街道模板：北京改成楼顶俯瞰 CBD、上海改在外滩隔江看陆家嘴、纽约改成低机位仰视一线天、东京改成路口斜上方俯看斑马线与人潮、伦敦改成河上船看塔桥、赛博霓虹改成驾驶位车景；每座城都带自己的镜头轨道（横移、仰视、环绕、随船起伏、随车前进）。
+- 新增会话用量能力：看板自己读本机的会话日志，折出每天的四类 token 分桶与按小时的结算次数，结果按日志的大小与修改时间缓存在看板自己的目录里；组件用它就不必依赖别的插件。
+- 天气卡按城市换景：北京一线是古建塔殿、苏杭是水墨山峦与庭院，设置里还能指定景观与动画方式（漂移、静止、轮播）；文字尺寸改为按卡片宽高比例缩放，大卡片不再被 px 上限卡住。
+- 新增内置数据源 widget-board:session.usage 与内置的「最近 Token 用量」卡片：插件启动之后订阅会话事件，按所选会话、本地当天与全部三个窗口给出带用量调用的 token 合计、最近一次与最近 30 个点，读数里只出现会话 id 的前 8 位；同时卡片离开视口后暂停刷新，回到视口时补读一次数据。
+
+### 体验优化
+
+- 组件库从浮在下方菜单上的小窗改成从底部上拉的整窗，铺满看板这一栏；打开与关闭用 Panel reveal 过渡（上移 100px、2px 交叉虚化，打开 400ms、关闭 350ms），开始拖动组件时面板先收起，落点直接露出来。
+- 天气卡换成 Three.js 搭的立体窗景：三层楼群与窗灯、湿路面上的车流、雨雪与雷电、塔顶航空灯与扫过的探照灯，镜头缓慢推拉并跟随指针；新增精选库 three，只有声明 libs 的组件才内联它。
+- 「活动」卡片改成一张用量图：上排一个已经消耗的 Token 总量，下面按卡片的实际宽高铺满用量格子。格子边长、列数与行数都由盒子算出来，格子总数跟着记录长度走并封顶 364 格，悬停读出当天用量；装了 dsh-claude-style 时先读它折好的那份，没装就用看板自己的汇总。
+- 卡片设置里的城市字段改成可检索的选择器：边输入边列出候选（中文名、英文名、地区），点一条就把城市名、双语地名与坐标一次填好，选中后显示已解析的坐标并能「换一座」。
+- 七个工具改为启动时一次全部注册，不再由 widget_catalog 的 expose 逐个放出来：工具表在会话中途变化会让宿主那条线路的前缀缓存整段失效（Kimi 线路上实测一次就是 62 万 token 的重算），所以 expose 保留为记账参数、不再改变模型能调用什么。
+- 内置组件按盒子重排：宽而矮的卡片改成横排（标题在左、内容在右或按列铺开），窄而高的卡片在竖直方向铺开，正方与常规仍是上下结构；大字读数按宽高一起收，长条里不再出现左边一小块、右边一大片空白。月历在矮卡片里改画一整周；组件套件新增 `.t-data--split`，数据卡骨架的内边距与标题字号也按档位收一档。
+- 天气卡恢复为低开销的 Canvas 窗景，并在这一版上重做界面：窗外加入黎明、黄金时刻、暮色与夜幕的二维天光，太阳/月亮位置、云的颜色与地平线暖光随当地时刻和日出日落变化；卡片头部加了阶段标记与地点光点，天气图标改成磨砂圆章，天气与高低温并成一行，底部预报改成带背景模糊的薄底舱；玻璃上的雨雪、水珠与城市灯火保留，像素比上限降到 1.5，浅色/深色按宿主令牌判断。
+- 「最近 Token 用量」卡片的 today 与 all 两个窗口开始合并插件启动之前的历史：注册时先读一次 dsh-usage 的用量总览，再建立实时订阅，两段来源不重复计数；session 窗口仍只用实时数字。插件可能在宿主绑上端口之前启动，那一次读会失败，所以这两个窗口最多再补读两次（含首次共三次尝试，成功或形状不合格即停）；补上时实时起点移到读完之后、这之间的实时累计整份清空，两段仍然不重复。没装 dsh-usage 时，这个地址上的 401 与 404 一样按未安装记——它自己的总览对回环请求放行，装上之后不会有 401，未装时先答话的是宿主的兜底鉴权。读不到或答出来的形状不合格时，卡片保留实时数据，并在读数里写明历史这一路的状态。
+
+### 问题修复
+
+- 宿主存得下的数据现在送得进组件：父页面发给组件的消息改用单独的 320 KiB 上限（原先与组件发出的消息共用 64 KiB），大快照的 data、state 与 init 不再在桥上被丢弃。
+- 删除所有看板后补上的不再是空白的「未命名看板」，而是首次启动的默认看板「我的看板」：卡片与布局都回到默认。
+- 放一张绑着需授权数据源的卡不再报错：卡片照加、数据留空，在卡片上给出「允许」之后再读就有数据；界面上加卡失败与卡片凭空出现的矛盾组合消失。
+- 设置弹窗画出来的凭据现在都存得进去：能力提供方声明的凭据与组件自己声明的在读写两侧按同一份清单核对，填了值不再被「组件没有声明这个凭据」拒绝。
+- 页面不再被旧快照盖掉刚收到的改动：快照带上变更通知的修订号，重取与写入答复换上快照之后，把比它新的事件按修订号重放一遍，状态与布局不再短暂回退。
+- widget_define 的自检在真实会话里量得出结果了：检查改经端口送进组件运行时（原先直接跨源读沙箱帧的窗口，必然失败），自检画廊也把组件的双语文案递进去，不再整页显示成 key。
+- 变更通知的心跳更稳：单个观众断线不再打断心跳，看板功能关掉再打开之后新连接的心跳也会重新起起来，长时间没有消息的连接不再被反向代理掐掉。
+- 界面交互的一批修复：从组件库拖出浏览器窗口松手不再让拖放层卡死、回窗点击也不再误加卡片（Escape 可取消）；设置里的数字框可以正常输入小数与科学计数法；在「关于」页做授权不再清空「配置」页的未保存草稿；布局提交期间加卡与刷新不再与它打架；组件库预览里的动作与能力调用不再发到宿主；关页前的最后一次状态保存改用 keepalive，更可靠；导入同名不同内容的组件时可以选「覆盖安装」。
+- 宿主侧持久化与拆除的一批修复：版本库与组件目录改用先写临时再换名的原子写法，崩溃不再留下半份文件；定时刷新的一批读取里一张卡被移除不再让整批失败；授权表里不合格的记录改为当场报错，不再被下次写入静默抹掉；widget_place 给出部分布局不再产出无效坐标，点名不存在的数据源先拒绝再动看板；卡片移除时它的请求日志一并回收；插件拆除时目录来源、授权与热更新订阅收干净；并发删除同一组回到 404。
+
+### 安全
+
+- 导入安全加固：看板包里内嵌的组件文件按组件包同一组上限校验（路径不越出目录、扩展名白名单、文件数与大小），解压在解包前按声明的大小逐项拦截，内嵌的 manifest 与哈希同落盘内容核对不上就整包拒绝。
+- 会话工具读数据源补上授权闸门：widget_place 与 widget_show 的读取改走界面手动读的同一条路径，需要授权的数据源在没有人的允许之前不再被工具直接读取。
+
+<h3 id="en-0.1.6">New Features</h3>
+
+- New built-in widget, Light switch: a desk lamp whose base switch flips the room between day and night, moving the sun, moon, stars and the light beam together. The switch goes through the generic dsh.theme capability; the browser half reveals the new palette across the whole page as a circle growing from the lamp, with the old picture left outside it. The card's ripple shares the press point and starts with the page circle once the new tokens reach the card; the circle's center and radius are percentages, so a 1.5x display no longer pulls it toward the top-left. Other cards are suspended only after the old snapshot is taken and resumed in batches, so the press never freezes them early; when View Transitions are unavailable or reduced motion is requested it switches directly, and the host half can read and write the theme preference as a fallback.
+- Six new city-scape scenes for the weather card: Beijing CBD with the CITIC Tower, Shanghai Lujiazui with the Pearl Tower and the Bund, Manhattan, Shibuya, the City of London, and a cyberpunk neon canyon; each has animated media facades, billboard screens, neon signs, pedestrians and traffic, picked by city or chosen in settings.
+- The six city scenes no longer share one street template: Beijing is a rooftop view over the CBD, Shanghai looks across the river from the Bund, New York is a low upward view through a canyon, Tokyo looks down on the scramble crossing, London rides a boat toward Tower Bridge, and the cyberpunk scene is a driver's-seat view; each scene brings its own camera track.
+- Add the session-usage capability: the board reads this machine's session logs itself, folds them into four token buckets per day and settlements per hour, and caches the result by each log's size and modification time in its own directory, so a widget no longer depends on another plugin for these figures.
+- The weather card now matches the city: historic towers and halls for Beijing, ink-wash mountains or a walled courtyard for Jiangnan cities, with settings for the scene and motion (drift, still, rotate); text now scales with the card instead of hitting a fixed pixel cap.
+- Add the built-in widget-board:session.usage data source and the built-in recent-token-usage card: from the moment the plugin starts it subscribes to session events and reports token totals for the selected session, the local day and everything since start, plus the latest call and the last 30 points, with only the first 8 characters of a session id in the reading. Cards also stop refreshing while they are out of view and read once when they come back.
+
+### Improvements
+
+- The widget library is now a full-height panel that rises from the bottom of the board pane instead of a small window above the dock; opening and closing use the Panel reveal transition (100px rise, 2px cross-blur, 400ms in and 350ms out), and a drag dismisses the panel first so the drop target is visible.
+- The weather card now renders a Three.js cityscape: three depth bands of towers with lit windows, traffic on wet asphalt, rain, snow and lightning, rooftop beacons and sweeping searchlights, with a camera that drifts and follows the pointer; a new curated library, three, is inlined only into widgets that declare it.
+- The Activity card becomes a usage chart: the tokens spent so far, then a grid of daily usage that fits the card&#39;s own width and height. Cell size, columns and rows all follow the box; the number of cells follows how long the record actually is, capped at 364, and each day reads out on hover. It reads dsh-claude-style&#39;s fold when that plugin is installed and the board&#39;s own otherwise.
+- The city field in card settings is now a searchable picker: typing lists suggestions (Chinese name, English name, region), picking one fills the city name, both names and the coordinates, and the chosen place shows its coordinates with a Change button.
+- All seven tools are now registered at startup instead of being revealed one by one through widget_catalog's expose: a tool list that changes mid-session invalidates the whole prompt prefix cache on the host route (measured once at 620k tokens on the Kimi line), so expose stays as bookkeeping and no longer changes what the model can call.
+- Built-in widgets are laid out per box: wide-and-short cards read horizontally (title left, content right or in columns), narrow-and-tall cards distribute vertically, square and regular cards keep the stacked flow; large readouts scale with width and height, so a wide strip no longer leaves a small cluster on the left and empty space everywhere else. The calendar draws a single week in short cards; the suite gains `.t-data--split`, and the data-card skeleton tightens its padding and title size per box class.
+- The weather card returns to the lightweight canvas window scene, with a refined interface on top: the view now has two-dimensional dawn, golden hour, dusk and night light, with the sun/moon position, cloud colors and horizon glow following local time and sunrise/sunset; the header gains a phase marker and location dot, the weather icon becomes a frosted medallion, condition and high/low share one row, and the forecast becomes a softly blurred dock. Rain, snow, glass drops and city lamps remain, pixel ratio is capped at 1.5, and light/dark follows the host tokens.
+- The recent-token-usage card's today and all windows now merge the usage recorded before the plugin started: the board reads dsh-usage's overview once, then opens the live subscription, so the two sources never count the same stretch twice, while the session window stays live-only. The plugin can start before the host has bound its port and that first read then fails, so these two windows retry at most twice more (three attempts in total, stopping as soon as the history is available or its shape is unusable); a successful retry moves the live starting point to the moment it finishes and clears the live ledger recorded in between, so the two stretches still never overlap. Without dsh-usage installed, a 401 on that address counts as not installed just like a 404, because its own overview lets loopback requests through and never answers 401 once it is there, while the host's fallback authorization answers first when it is not. When the history cannot be read or answers in a shape the board cannot use, the card keeps its live figures and states the history source's condition in the reading.
+
+### Bug Fixes
+
+- Data the host accepts can now reach the widget: messages from the parent page to a widget use their own 320 KiB limit (previously shared the 64 KiB cap with widget-originated messages), so large data snapshots, states, and init payloads are no longer dropped at the bridge.
+- Deleting every board now leaves the default "My board" from the first launch instead of a blank "Untitled board", with its cards and layout restored.
+- Adding a card bound to a source that needs authorization no longer fails: the card is added with empty data, and after the user allows it on the card the data arrives; the confusing mix of an error toast and a card that appeared anyway is gone.
+- Every credential shown in the card settings dialog can now be saved: credentials declared by capability providers and by the widget itself are checked against the same list on both the read and the write side, so filling one in no longer fails with "the widget does not declare this credential".
+- Pages no longer lose freshly received changes to an older snapshot: snapshots now carry the change-notification revision, and events newer than the snapshot are replayed by revision after it is adopted, so state and layout no longer briefly revert.
+- The widget_define self-check now produces results in a real session: the inspection travels over the message port into the widget runtime (it previously read the sandboxed frame's window cross-origin, which always failed), and the gallery passes the widget's localized text so labels no longer render as raw keys.
+- Change notifications keep a steadier heartbeat: one broken viewer no longer interrupts the beat, and connections opened after the board was toggled off and back on get their heartbeat restarted, so idle connections are no longer cut by reverse proxies.
+- A batch of UI fixes: releasing a library drag outside the browser window no longer leaves the drag layer stuck and a stray click no longer drops a card (Escape cancels); number fields accept decimals and scientific notation; granting on the About tab no longer wipes unsaved drafts on the Config tab; adding cards and refreshing no longer race an in-flight layout submit; actions and capability calls from library previews no longer reach the host; the final state save before page close uses keepalive; and importing a same-id widget with different content now offers a replace option.
+- A batch of host-side persistence and teardown fixes: the version store and widget directories use write-temp-then-swap atomic writes so a crash no longer leaves half-written files; one removed card no longer fails a whole scheduled refresh batch; malformed grant records now fail loudly instead of being silently erased on the next write; widget_place no longer produces invalid coordinates from a partial layout and rejects unknown data sources before touching the board; a removed card's request log is reclaimed; plugin teardown removes its directories, grants, and hot-update subscription; and concurrent removal of the same group now returns 404.
+
+### Security
+
+- Hardened imports: widget files embedded in board packages now pass the same checks as widget packages (paths stay inside the directory, extension whitelist, file count and size limits), decompression is rejected per entry by declared size before unpacking, and an embedded manifest or hash that disagrees with the embedded files rejects the whole package.
+- Session tools now pass the authorization gate when reading data sources: widget_place and widget_show reuse the same path as manual reads from the UI, so sources that require permission are no longer read by tools without a human grant.
+
+## [0.1.5] - 2026-10-23
+
+[中文](#cn-0.1.5) | [English](#en-0.1.5)
+
+<h3 id="cn-0.1.5">新增功能</h3>
+
+- 新增内置组件「今日宜休」：按卡片设置里的 GitHub 令牌认账号，列出这个账号名下还开着的 issue，带仓库、编号、标签与开了几天；点一行就在新标签页里打开那一条。组件自己不能导航，跳转交给宿主页面完成。
+- 看板多出第二种排列：整齐行列。卡片按保存的顺序逐行铺开，同一排的卡片等高，行列间距一致；期望的跨列数与高度存在看板上，像素坐标每次按当前窗口宽度与根字号现算，窗口变宽变窄都不用重新摆。看板数据格式升到版本 3，旧看板读出来仍是自由位置，新建的看板默认用整齐行列。下方菜单多一枚「排列模式」：一键在两种排法之间切换，第一次切到整齐时把屏幕上的阅读顺序存下来，再切回去还是那份自由位置。整齐模式里拖动是调整顺序，缩放横向改自己的跨列数、纵向把整行抬到同一档；卡片与组卡的增删会同步维护顺序。布局与排列共用一套修订号并发规则，两个窗口同时改时后到的提交收到 409 与当前快照。
+- 看板上可以直接创建与编辑卡片内容：下方菜单与组件库头部多了「创建卡片」，选一个模板（文本笔记、待办清单、常用链接、日期倒计时，或从组件库里挑任意组件）之后按组件自己声明的 schema 填内容，右边是真实的渲染预览，一次提交才建出实例。表单能编辑字符串、数字、布尔、枚举、日期、时刻、多层的对象与数组；数组项可以加、删、上下移动，表单不支持的写法给一个显式的 JSON 入口并说明原因。卡片设置里多了「编辑内容」，按读到的修订号保存，冲突时保留输入并给出重新读取与另存为新卡片两条路。宿主新增 `POST /boards/<id>/compose`、`GET|POST /instance/<id>/content` 与 `GET /library/<id>/form` 三条人工内容路由，请求体 128KiB，props、data 与 state 分别按 schema 校验，单卡状态、整板状态与握手消息的额度各报一次。
+- 新增内置组件「运行成本」：左边是宿主进程的常驻内存，右边是一块机器体检面板——堆与外部内存、系统内存、CPU 核数与负载、看板数据所在卷的磁盘余量、系统版本，外加卡片数、状态序列化总量、文档体积与组件库规模，最近 60 次采样画成折线。面板上的「再测一次」由宿主经同一条读取路径重读一次。数据源 `widget-board:system.metrics` 只读宿主自己的内存、机器读数与工作区，没有观众时不采样；卡片离开视口或页面隐藏时停止绘制与状态写入。矮盒子里保留四行带条形图的读数，堆、系统内存、CPU 与磁盘始终看得到。
+- 组件可以把链接交给宿主打开：`widget.open(url)` 发一条桥消息，由宿主页面在新标签页里开出这一页，协议只限 http 与 https。沙箱仍然不给导航与弹窗，组件拿到的只是「请宿主开一个网页」这一件事；会话里内联显示的卡片同样可用。
+- 天气卡改成按城市名取天气：设置里写「杭州」或「Hangzhou」，保存时由设置界面解析成经纬度与双语地名，卡片按它取 Open-Meteo 的五天预报；旁边新增「定位」，先问浏览器位置，拿不到时按网络出口确定城市。城市名、地名与坐标由同一份配置一起写进卡片，城市名与坐标不会再各说各的。组件的 props schema 新增两个可选的 `format`：`city` 是一个可以定位的城市名，`fills` 指明解析出的地名与坐标写到哪几个字段；`hidden` 的字段不出控件，留给这类派生值。
+
+### 体验优化
+
+- 月历重做：日期格第二行写农历，按「节气 → 节日 → 初一写月名 → 农历日」取一条，节气与节日各有颜色；日期格的字按格子的实际宽高算出来，一到四列、六到三十行的盒子各有自己的排版，宽盒子里日程写成条目，很矮的盒子只留网格；卡片没有数据时不编样例日程，格子里不会冒出假的安排。新增内置组件「今日运势」：分数只由当天的黄道黑道、建除十二值星、星宿吉凶与宜忌条数加权，同一天永远同一个数，另排日期、农历、节气、建除、星宿、值神与当天的宜忌。组件组换成「日历组」：正面月历、背面今日运势，共用一个盒子，右上角的翻面按钮换面；换面不再接管指针，月历自己的翻月按钮因此点得动。组件格式新增 `scripts`，随组件发布的第三方库放在 `vendor/` 下。
+- 设置页的看板列表可以移除全部看板：移除最后一块时宿主补一块空的「未命名看板」并选中它，看板页始终有一块可以显示。
+- 天气卡改成「窗外是一幅画，卡片是它前面的一层玻璃」。晴天与多云是一幅清朗的窗景：蓝天、太阳或月亮、一朵朵有体积的积云——云面沿受光方向从亮到暗，鼓出来的地方有高光，上缘一道受光的亮边，日月从云后透出一圈光；云飘在城市后面，画面不闪。夜里换成月亮与满天星，晴朗的夜空里月亮不会被云盖住。阴天从多云里分出来，有了自己的天空。下雨下雪时，水珠落在玻璃上长大、顺着玻璃滑下并留下水痕，每颗大水珠真折射出它身后的世界；水珠会一直补足，长时间开着也不会滚空。雷暴另有闪电，两三秒一次，一亮一暗再补一下。组件格式新增 `scripts`：组件可以把逻辑按职责拆成目录里的多份脚本。
+- 卡片设置弹窗改成三节：配置、日志、关于。配置一节是一张两列的表，字段按组件自己声明的类型出输入框、数字、开关或下拉，组件声明的凭据与它们排在一起，值由宿主保存、界面只显示状态。日志一节列出这张卡对外的每一次请求（方法、主机与路径、状态与耗时）。内置组件去掉了「标题」「眉题」这类只换一行字的占位字段，剩下的字段补上了中英文名字。
+- 「今日宜休」按 GitHub 工作台那种排法重画：一行三段——左边状态点，中间标题加副行（仓库、编号、谁开的、标签、回复数），右边一列写「更新」与其下的时刻；标签用 GitHub 自带的颜色，列表上方多一行开放数。能力回的结果随之加上「最后更新时刻」「作者」与带颜色的标签。
+- 天气卡在大盒子里把城市、温度与天气文字一起放大：字号按卡片的实际宽高计算，温度再按高度收住，城市最大 40px、温度最大 200px，天气文字与高低温、预报栏跟着变大；城市、温度与天气各自压一层更厚的投影与上下柔光，浅色与深色下都更容易读。窄盒子把天气与高低温排成可以折行的一行，矮盒子收掉预报栏与日期，只留城市、天气、温度与高低温。
+
+### 问题修复
+
+- 组件库浮窗不再被别的插件给所有对话窗定的尺寸框住：它不再声明 `dialog` 这个角色，高度上限仍按与下方菜单的间距算，题头与关闭钮不会再被推到窗口上缘之外。
+- 月历与翻页时钟在矮盒子里不再被截断：盒子落到 6rem 高时，月历收掉导航按钮与星期行、把日期数字收小，翻页时钟的字号下界跟着盒子高度收小。尺寸矩阵的纵向截断判据下全部组件通过。DSH 余额卡的读数改成始终保留两位小数、十亿起只留整数并标近似号，窄盒子放不下时依次收货币代码、收紧一档、折行；卡片多一个可选的标签（kicker）。
+
+### 其他变更
+
+- README 的状态一节写明 npm 上的版本为 0.1.5。
+
+<h3 id="en-0.1.5">New Features</h3>
+
+- New built-in widget "Rest today": uses the GitHub token from the card settings to find the account and lists the open issues on its repositories, with repository, number, labels and age; clicking a row opens it in a new tab. Widgets cannot navigate themselves, so the host page opens the link.
+- The board gains a second arrangement: aligned rows. Cards flow row by row in a saved order; cards in the same row share one height and the row/column gaps match. Only the wanted column span and height tier are stored — pixel positions derive from the current window width and root font size, so resizing never asks you to re-arrange. The board format moves to version 3: existing boards stay free-positioned, new boards start aligned. The dock menu gains an arrangement toggle; switching to aligned captures the on-screen reading order once, and switching back restores the saved free positions. In aligned mode dragging reorders cards, horizontal resize changes the card's own span, vertical resize lifts the whole row one tier; adding or removing cards keeps the order intact. Layout and arrangement share one revision-based concurrency rule: a late submission from another window gets a 409 with the current snapshot.
+- Cards can be created and edited on the board: the dock menu and the library header gain "Create card", which picks a template (text note, to-do list, bookmarks, date countdown, or any widget from the library) and fills in what the widget's own schema declares, with a real rendered preview; the instance is written in one submit. The form edits strings, numbers, booleans, enums, dates, times, nested objects and arrays; array items can be added, removed and reordered, and schemas the form cannot render get an explicit JSON editor with the reason. The card settings gain "Edit content", which saves against the revision it read, keeps the input on conflict, and offers reload or save-as-new-card. The host gains three human content routes — `POST /boards/<id>/compose`, `GET|POST /instance/<id>/content` and `GET /library/<id>/form` — with a 128KiB body limit, per-schema checks for props, data and state, and separate reports for the single-card, whole-board and handshake budgets.
+- New built-in widget "Running cost": the host process's resident memory on the left and a machine check panel on the right — heap and external memory, system memory, CPU cores and load, free space on the volume holding board data, and the OS version, plus card count, serialized state size, document weight and library size, with the last 60 samples drawn as a sparkline. The panel's "Measure again" button asks the host to reread through the same path. The `widget-board:system.metrics` source reads only the host's own memory, machine readings and workspace; it samples nothing without an audience and stops drawing and writing state when the card leaves the viewport or the page is hidden. Short boxes keep four rows with bars, so heap, system memory, CPU and disk stay visible.
+- Widgets can hand a link to the host: `widget.open(url)` sends one bridge message and the host page opens it in a new tab, limited to http and https. The sandbox still grants no navigation or popups — a widget only gets to ask the host to open a page, and inline cards in a session can do it too.
+- The weather card now takes a city name: type “杭州” or “Hangzhou” in the settings, and the dialog resolves it into coordinates and a bilingual place name that the card uses for the five-day Open-Meteo forecast; a new Locate button asks the browser first and falls back to the city of this network. The name, place and coordinates are written together, so the city shown and the weather fetched no longer disagree. The widget props schema gained two optional formats: `city` marks a locatable city name, with `fills` naming the props that receive the resolved place and coordinates; `hidden` fields get no control and are left for those derived values.
+
+### Improvements
+
+- The month calendar is redone: the second line of every day carries the lunar date, picked as solar term, then festival, then the month name on the first day, then the lunar day, with terms and festivals coloured; the type in a day cell is derived from the cell's measured width and height, so one to four columns and six to thirty rem boxes each get their own layout, a wide box writes plans out as bars and a very short box keeps the grid alone, and a card without data invents no sample plans, so no fake entries appear in the cells. New built-in widget "Today's fortune": the score is weighted only by the day's auspicious or inauspicious deity, the twelve duty officers, the mansion's luck and the length of the almanac lists, so the same day always scores the same, beside the date, lunar date, solar terms, duty officer, mansion, deity and the day's do and avoid lists. The default group is now the calendar group: a month calendar on the front and today's fortune on the back sharing one box, flipped by the button in the top right corner; flipping no longer takes the pointer, so the calendar's own month buttons stay clickable. The widget format gained `scripts`, and a third-party library shipped with a widget lives under `vendor/`.
+- The board list in settings can now remove every board: removing the last one leaves a fresh empty "Untitled board" selected, so the board page always has one to show.
+- The weather card is now a view outside a window with the card as the glass in front of it. Clear and cloudy days are a crisp window view: blue sky, a sun or moon, and cumulus clouds with real volume — each cloud shades from lit to shadowed along the light direction, its bumps catch highlights, its upper edge carries a lit rim, and the sun or moon bleeds a glow through it. The clouds drift behind the city and nothing strobes. At night the moon and stars take over, and a clear night leaves the moon unobstructed. Overcast is its own sky rather than a shade of cloudy. In rain and snow, droplets land on the glass, grow, slide down leaving wet trails, and the large ones genuinely refract the world behind them; the glass keeps replenishing its droplets, so it never runs dry however long the card stays open. A thunderstorm adds lightning every two or three seconds, a bright strike with a second, fainter pulse. The widget format gained `scripts`, so a widget can split its logic into several files by responsibility.
+- The card settings dialog now has three sections: configuration, log and about. Configuration is a two-column table — each field gets a text input, number input, switch or dropdown according to the type the widget declares, and the widget's credentials sit in the same table, stored by the host with only their status on screen. The log section lists every request the card makes, with method, host and path, status and time. Built-in widgets dropped the placeholder title/kicker fields, and the remaining fields gained labels.
+- The Rest today card is redrawn after the GitHub workbench layout: each row has a state dot on the left, the title plus a sub line (repository, number, author, labels, replies) in the middle, and an "Updated" column with the time on the right; labels keep their GitHub colors, and a count line sits above the list. The capability result now carries the last-updated time, the author, and colored labels.
+- In large boxes the weather card scales the city, temperature and condition together: type sizes come from the card's measured width and height, the temperature is further capped by height, the city grows to 40px and the temperature to 200px, and the condition, highs and lows and forecast bar grow with them; a stronger shadow and top/bottom scrim keep all three readable in light and dark. Narrow boxes let the condition and highs wrap onto one line, and short boxes drop the forecast bar and the date, keeping the city, condition, temperature and highs.
+
+### Bug Fixes
+
+- The widget library no longer takes the size another plugin gives every dialog: it no longer declares the dialog role, so its own cap — the space above the menu — keeps the header and close button inside the window.
 - The calendar and the flip clock are no longer clipped in short boxes: at 6rem the calendar drops its nav buttons and weekday row and shrinks the day numbers, and the flip clock's minimum font size follows the box height. Every widget now passes the size matrix's vertical-clipping check. The DSH balance card keeps two decimals up to a billion and shows whole numbers with an approximation mark above that; in narrow boxes it drops the currency code, tightens a step, then wraps. The card gains an optional kicker label.
+
+### Chores
+
+- The README status section names the version on npm as 0.1.5.
 
 ## [0.1.4] - 2026-10-18
 

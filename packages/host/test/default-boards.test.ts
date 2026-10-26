@@ -87,8 +87,8 @@ describe('第一次启动的看板', () => {
     const builtin = [...records.values()].filter((record) => record.source === 'builtin').map((record) => record.manifest.id)
     expect(widgetsOf(gallery).sort()).toEqual([...builtin].sort())
     expect(widgetsOf(gallery)).toEqual([
-      'stat', 'gauge', 'progress', 'chart', 'heatmap', 'table', 'kv', 'list', 'timeline', 'image', 'markdown', 'json', 'diff', 'dsh-balance', 'github-issues',
-      'board-hero', 'clock', 'calendar', 'fortune', 'year-progress', 'weather', 'pomodoro', 'todo', 'links', 'countdown',
+      'stat', 'gauge', 'progress', 'chart', 'heatmap', 'session-usage', 'table', 'kv', 'list', 'timeline', 'image', 'markdown', 'json', 'diff', 'dsh-balance', 'github-issues',
+      'board-hero', 'clock', 'calendar', 'fortune', 'year-progress', 'weather', 'pomodoro', 'todo', 'links', 'countdown', 'light-switch',
       'flip-card', 'holographic-card', 'magnetic-card', 'campus', 'system-metrics',
     ])
   })

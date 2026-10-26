@@ -5,23 +5,23 @@
     "en": "Weather"
   },
   "description": {
-    "zh": "窗景天气卡：数据由 Open-Meteo 提供，组件把原始响应映射成五天预报。背景是一幅现画的窗外景：晴有光晕、夜里有月亮与星，雨雪落在玻璃上顺着玻璃流；切换预报日时整片天空跟着换。",
-    "en": "A window-view weather card: Open-Meteo supplies the raw reading and the widget maps it into a five-day forecast. The background is a painted view outside the window — sun glare, a moon and stars at night, rain and snow running down the glass — and switching days changes the whole sky."
+    "zh": "窗景天气卡：数据由 Open-Meteo 提供，组件把原始响应映射成五天预报。窗外是一幅现画的景，黄金时刻、黎明、暮色与夜幕各自有光、云的颜色和城市轮廓；雨雪落在玻璃上顺着玻璃流，切换预报日时整片天空跟着换。",
+    "en": "A window-view weather card: Open-Meteo supplies the raw reading and the widget maps it into a five-day forecast. Outside is a painted scene whose light, clouds and skyline change through golden hour, dawn, dusk and night; rain and snow run down the glass, and switching days changes the whole sky."
   },
   "author": "dsh-widget-board",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "sizes": ["s", "l"],
   "defaultBox": { "w": 1, "h": 22 },
   "minBox": { "w": 1, "h": 16 },
   "source": "http",
   "request": {
-    "url": "https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,temperature_2m_mean&timezone=auto&forecast_days=5",
+    "url": "https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,temperature_2m_mean,sunrise,sunset&timezone=auto&forecast_days=5",
     "cacheMs": 18000000
   },
   "permissions": {
     "hosts": ["api.open-meteo.com"]
   },
-  "scripts": ["world.js", "glass.js"],
+  "scripts": ["daylight.js", "world.js", "glass.js"],
   "props": {
     "type": "object",
     "properties": {
@@ -59,7 +59,8 @@
         "properties": {
           "temperature_2m": { "type": "number" },
           "weather_code": { "type": "integer" },
-          "is_day": { "type": "integer" }
+          "is_day": { "type": "integer" },
+          "time": { "type": "string" }
         }
       },
       "daily": {
@@ -70,7 +71,9 @@
           "weather_code": { "type": "array", "minItems": 5, "items": { "type": "integer" } },
           "temperature_2m_max": { "type": "array", "minItems": 5, "items": { "type": "number" } },
           "temperature_2m_min": { "type": "array", "minItems": 5, "items": { "type": "number" } },
-          "temperature_2m_mean": { "type": "array", "minItems": 5, "items": { "type": "number" } }
+          "temperature_2m_mean": { "type": "array", "minItems": 5, "items": { "type": "number" } },
+          "sunrise": { "type": "array", "minItems": 5, "items": { "type": "string" } },
+          "sunset": { "type": "array", "minItems": 5, "items": { "type": "string" } }
         }
       }
     }
@@ -80,22 +83,6 @@
     "everyMs": 18000000
   },
   "text": {
-    "props.place.label": {
-      "zh": "地点",
-      "en": "Place"
-    },
-    "props.place.hint": {
-      "zh": "显示在卡片上的地名",
-      "en": "The place name shown on the card"
-    },
-    "props.latitude.label": {
-      "zh": "纬度",
-      "en": "Latitude"
-    },
-    "props.longitude.label": {
-      "zh": "经度",
-      "en": "Longitude"
-    },
     "loading": {
       "zh": "正在获取天气",
       "en": "Fetching weather"

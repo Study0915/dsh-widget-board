@@ -22,6 +22,7 @@ import tokens from '@dsh-widget-board/contracts/tokens.json'
 import type { GridMetrics } from '@dsh-widget-board/model'
 import { DEFAULT_HEIGHT_REM, gridMetrics, snapCardY } from '@dsh-widget-board/model'
 import { BoardGrid } from './board-grid'
+import { useBoardArrangement } from './board-arrangement'
 import { CardComposer } from './composer/composer'
 import { ContentEditor } from './composer/content-editor'
 import { deleteBoardById, renameBoardTo } from './board-management/actions'
@@ -45,12 +46,12 @@ import {
   refreshBoard,
   removeGroup,
   removeInstance,
-  saveBoardArrangement,
   saveInstanceState,
 } from './snapshot'
 import { BoardTabs } from './tabs'
 import type { ShellTheme } from './theme'
 import { resolveTheme, watchTheme } from './theme'
+import { createVisibilityReporting } from './visibility'
 
 /** 根字号的像素值：列宽与卡片高度按它换算（D16）。 */
 function rootFontSize(): number {
@@ -123,6 +124,8 @@ export function BoardPage({ context }: BoardPageProps): ReactNode {
   const busyRef = useRef(false)
   /** 快照请求的序号：先发出、后返回的那一份不能盖掉更新的那一份。 */
   const fetchIdRef = useRef(0)
+  /** 最近合并的事件帧：换上落后的快照之后按修订号把它们重放回去（D18）。 */
+  const recentFramesRef = useRef<readonly BoardEventFrame[]>([])
   const exitingRef = useRef(new Set<string>())
   /** 退场期间收到的卡片增删通知：等最后一张退完再重取。 */
   const queuedRefetchRef = useRef(false)
@@ -132,6 +135,9 @@ export function BoardPage({ context }: BoardPageProps): ReactNode {
   /** 当前选中那块看板的「整理」：菜单上的按钮按它走。 */
   const tidyRef = useRef<(() => void) | null>(null)
   const frames = useMemo(() => frameHostOf(), [])
+  /** 现在看得见的卡片：观察器每次回调都换成这一份，再交给宿主（D6 的单卡可见性）。 */
+  const visibleIdsRef = useRef(new Set<string>())
+  const reporting = useMemo(() => createVisibilityReporting(), [])
 
   const controls = useMemo<CardControls>(() => ({
     register(id, handlers) {
@@ -140,13 +146,28 @@ export function BoardPage({ context }: BoardPageProps): ReactNode {
     },
   }), [])
 
+  /**
+   * 换上一份宿主刚给的快照，并把快照落后期内已合并的事件重放回去。
+   *
+   * 事件与快照响应走两条连接，没有先后保证：比快照新的事件先并进了旧快照，直接换上新的会把
+   * 它们盖掉，直到下一条事件才回来。事件帧带修订号，比快照新的那几条在换上快照之后重放一遍。
+   */
+  const adopt = useCallback((next: WorkspaceSnapshot): WorkspaceSnapshot => {
+    const missed = recentFramesRef.current.filter((frame) => frame.revision > next.revision)
+    recentFramesRef.current = missed
+    let merged = next
+    for (const frame of missed) merged = mergeEvent(merged, frame)
+    return merged
+  }, [])
+
   /** 换上一份宿主刚给的快照：在途的重取作废，失败提示清掉（D5）。 */
   const apply = useCallback((next: WorkspaceSnapshot): void => {
     fetchIdRef.current += 1
-    cachedWorkspace = next
-    setSnapshot(next)
+    const merged = adopt(next)
+    cachedWorkspace = merged
+    setSnapshot(merged)
     setFailure(null)
-  }, [])
+  }, [adopt])
 
   /** 重取一次工作区：只有卡片与看板增删、组件库变化才走到这里（D18）。 */
   const refetch = useCallback(() => {
@@ -154,13 +175,14 @@ export function BoardPage({ context }: BoardPageProps): ReactNode {
     fetchIdRef.current = id
     fetchWorkspace().then((next) => {
       if (id !== fetchIdRef.current) return
-      cachedWorkspace = next
-      setSnapshot(next)
+      const merged = adopt(next)
+      cachedWorkspace = merged
+      setSnapshot(merged)
       setFailure(null)
     }, (error: Error) => {
       if (id === fetchIdRef.current) setFailure(error.message)
     })
-  }, [])
+  }, [adopt])
 
   /** 打开一张卡或一组的设置；记下按钮，关掉弹窗之后把焦点还回去（D27）。 */
   const openEditor = useCallback((kind: 'instance' | 'group', id: string, button: HTMLButtonElement | null): void => {
@@ -234,6 +256,7 @@ export function BoardPage({ context }: BoardPageProps): ReactNode {
       return
     }
     // 状态、数据、布局与选中就地合并：番茄钟每秒写一次状态，重取整份快照会把开着的每个页面都放大一遍（D18）。
+    recentFramesRef.current = [...recentFramesRef.current.slice(-63), frame]
     setSnapshot((previous) => {
       if (previous === null) return previous
       const next = mergeEvent(previous, frame)
@@ -258,7 +281,7 @@ export function BoardPage({ context }: BoardPageProps): ReactNode {
     })
   }, [])
 
-  /** 排列偏好提交成功：把这一块看板的偏好并回去（D29）。 */
+  /** 排列偏好提交成功：把这一块看板的偏好并回去（D30）。 */
   const onArrangement = useCallback((boardId: string, layoutRevision: number, arrangement: Arrangement) => {
     setSnapshot((previous) => {
       if (previous === null) return previous
@@ -371,7 +394,7 @@ export function BoardPage({ context }: BoardPageProps): ReactNode {
   /**
    * 把组件库的一格拖到看板上：按落点算出列与纵向位置，随添加请求一起交给宿主。
    *
-   * 落点不在当前选中的那块看板的内容区（在浮窗、菜单或别的看板上）时不加卡片，返回 false 让拖放
+   * 落点不在当前选中的那块看板的内容区（在面板、菜单或别的看板上）时不加卡片，返回 false 让拖放
    * 那边收尾。
    *
    * @param widget - 组件的 id。
@@ -466,52 +489,12 @@ export function BoardPage({ context }: BoardPageProps): ReactNode {
   /** 菜单上的「整理」交给当前选中的那块看板：它自己拿着画面上那一份排布。 */
   const onTidy = useCallback(() => { tidyRef.current?.() }, [])
 
-  /** 在两种排列模式之间切换：第一次切到整齐时把屏幕上的阅读顺序存成顺序（B2、D29）。 */
-  const onToggleArrangement = useCallback(() => {
-    if (busyRef.current || activeBoard === null) return
-    const going = activeBoard.arrangement?.mode === 'aligned' ? 'free' : 'aligned'
-    let arrangement: Arrangement
-    if (going === 'free') {
-      arrangement = { mode: 'free' }
-    } else {
-      // 第一次切到整齐：按当前画面上的 y、x 阅读顺序生成，期望盒子取此刻的显示盒子（B2）。
-      const cards = activeBoard.instances
-      const grouped = new Map<string, { front?: typeof cards[number], any?: typeof cards[number] }>()
-      for (const instance of cards) {
-        if (instance.group === undefined) continue
-        const slot = grouped.get(instance.group.id) ?? {}
-        if (instance.group.side === 'front') slot.front = instance
-        grouped.set(instance.group.id, slot)
-      }
-      const units = cards
-        .filter((instance) => instance.group === undefined || instance.group.side === 'front')
-        .map((instance, index) => ({ instance, index }))
-      units.sort((left, right) => {
-        const a = left.instance.layout
-        const b = right.instance.layout
-        const y = a.y - b.y
-        if (y !== 0) return y
-        const x = a.x - b.x
-        return x !== 0 ? x : left.index - right.index
-      })
-      const order = units.map(({ instance }) => instance.id)
-      const boxes: Record<string, { w: number, h: number }> = {}
-      for (const { instance } of units) boxes[instance.id] = { w: instance.layout.w, h: instance.layout.h }
-      arrangement = { mode: 'aligned', aligned: { order, boxes } }
-    }
-    busyRef.current = true
-    setBusy(true)
-    void saveBoardArrangement(activeBoard.id, activeBoard.layoutRevision, arrangement).then((result) => {
-      if (result.kind === 'stale') apply(result.snapshot)
-      else onArrangement(activeBoard.id, result.saved.layoutRevision, result.saved.arrangement)
-    }, (error: Error) => {
-      setFailure(error.message)
-      refetch()
-    }).finally(() => {
-      busyRef.current = false
-      setBusy(false)
-    })
-  }, [activeBoard, apply, onArrangement, refetch])
+  const onToggleArrangement = useBoardArrangement({ activeBoard, busyRef, setBusy, apply, onArrangement, setFailure, refetch })
+  /** 栅格提交布局的忙碌：两道闸门（`busy` 状态与 `busyRef`）一起走，加卡、刷新才看得见它。 */
+  const onBusyChange = useCallback((next: boolean): void => {
+    busyRef.current = next
+    setBusy(next)
+  }, [])
 
   const registerFlow = useCallback((id: string, element: HTMLDivElement | null): void => {
     if (element === null) flowRefs.current.delete(id)
@@ -522,7 +505,11 @@ export function BoardPage({ context }: BoardPageProps): ReactNode {
     tidyRef.current = tidy
   }, [])
 
-  useEffect(() => subscribeLive(onEvent), [onEvent])
+  // 重连之后宿主那边这页的可见集合已经清掉了：接上时重报一次，宿主不必把断线当成「还在看」。
+  useEffect(() => subscribeLive(onEvent, () => { reporting.resend() }), [onEvent, reporting])
+
+  // 离开看板时这一页再看不见任何卡片（D6）。
+  useEffect(() => () => { reporting.dispose() }, [reporting])
 
   // 打开看板就算看过之前的通知。放在布局效果里：卡片 iframe 的握手要等这次提交之后，组件在
   // init 里发来的通知不会被这一下清掉（D7）。
@@ -553,21 +540,66 @@ export function BoardPage({ context }: BoardPageProps): ReactNode {
     return () => observer.disconnect()
   }, [])
 
+  // 观察器只随卡片名单重建：状态与布局的通知每秒都在改快照对象，观察器不能跟着每秒拆装一遍
+  //（D18 的就地合并、页面级资源唯一拥有者）。同一批回调顺带把可见的卡片 id 报给宿主（D6）。
+  const instanceIds = activeBoard === null ? '' : activeBoard.instances.map((instance) => instance.id).join(',')
   useEffect(() => {
     const node = boardsRef.current
     if (node === null) return
+    const visible = visibleIdsRef.current
+    const cells = [...node.querySelectorAll<HTMLElement>('[data-instance]')]
+    // 组卡的两面共用一个盒子，观察节点上只带正面那张的 id（D19）：背面那张与它同进同出。
+    const twins = new Map<string, string>()
+    const groups = new Map<string, string[]>()
+    for (const instance of activeBoard?.instances ?? []) {
+      const group = instance.group?.id
+      if (group === undefined) continue
+      groups.set(group, [...(groups.get(group) ?? []), instance.id])
+    }
+    for (const members of groups.values()) {
+      for (const id of members) {
+        for (const other of members) {
+          if (other !== id) twins.set(id, other)
+        }
+      }
+    }
+    const present = new Set<string>()
+    for (const cell of cells) {
+      const id = cell.dataset.instance
+      if (id === undefined) continue
+      present.add(id)
+      const twin = twins.get(id)
+      if (twin !== undefined) present.add(twin)
+    }
+    // 换到另一块看板时旧的一批 id 已经不在这块看板上了；观察器的第一次回调会补上新的那一批。
+    for (const id of [...visible]) {
+      if (!present.has(id)) visible.delete(id)
+    }
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         const id = (entry.target as HTMLElement).dataset.instance
-        const handlers = id === undefined ? undefined : cardControls.current.get(id)
+        if (id === undefined) continue
+        const twin = twins.get(id)
+        if (entry.isIntersecting) {
+          visible.add(id)
+          if (twin !== undefined) visible.add(twin)
+        } else {
+          visible.delete(id)
+          if (twin !== undefined) visible.delete(twin)
+        }
+        const handlers = cardControls.current.get(id)
         if (handlers === undefined) continue
         if (entry.isIntersecting) handlers.resume()
         else handlers.pause()
       }
+      reporting.report([...visible])
     }, { threshold: 0 })
-    for (const cell of node.querySelectorAll('[data-instance]')) observer.observe(cell)
+    for (const cell of cells) observer.observe(cell)
+    // 一块没有卡片的看板不会有回调：这一页看得见的是空集合。
+    if (cells.length === 0) reporting.report([])
     return () => observer.disconnect()
-  }, [activeBoard?.id, metrics, snapshot])
+    // 热刷新让每张卡换一个 key 重挂：节点换了，观察器也要重新登记。
+  }, [activeBoard?.id, metrics, instanceIds, refreshGeneration, reporting])
 
   let body: ReactNode = null
   if (failure !== null) body = <div className="dsh-widget-board__notice">{failure}</div>
@@ -616,7 +648,7 @@ export function BoardPage({ context }: BoardPageProps): ReactNode {
                 onLayouts={onLayouts}
                 onArrangement={onArrangement}
                 onFailure={setFailure}
-                onBusyChange={setBusy}
+                onBusyChange={onBusyChange}
                 onSettings={openEditor}
                 onState={onState}
                 onNotify={onNotify}

@@ -40,6 +40,8 @@ import { createProviderRegistry, widgetIdsIn } from './providers'
 import { registerDshAccount } from './dsh-account'
 import { createSystemMetricsAction, createSystemMetricsSource } from './system-metrics'
 import { registerGithub } from './github'
+import { registerTheme } from './theme'
+import { registerUsage } from './usage'
 import { createScheduler, intervalOf } from './refresh'
 import { createToolContext, registerTools } from './tools'
 import { createSelfChecks } from './selfcheck'
@@ -113,8 +115,13 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const sources = createRegistries()
   // 内置的 DSH 账户能力（D24）：余额这类宿主服务由一个小提供方按能力注册，看板核心不认它。
   const disposeDshAccount = registerDshAccount(sources, ctx)
+  // 外观主题（D29）：通用能力，任何组件都能读写；浏览器半边用同名能力接住调用，补上整页转场。
+  const disposeTheme = registerTheme(sources, ctx)
   // GitHub 的 issue 列表（D24）：令牌从卡片设置的凭据服务现取，看板核心不碰 GitHub。
   const disposeGithub = registerGithub(sources, () => credentialsOf(ctx))
+  // 会话用量（D24）：看板自己读会话日志、自己缓存，组件不必依赖别的插件；装了 dsh-claude-style
+  // 时组件先问它，两份汇总不会同时算。实时那一路先取 dsh-usage 的启动前快照再订阅，因此要等它。
+  const disposeUsage = await registerUsage(sources, ctx, home)
   // 全部看板与唯一的写入者（D21）：旧版本的单份 `board.json` 在这一步搬成第一块看板。
   // 卡片增删与组件库重读才改变定时刷新的表；状态、数据与布局写入不重算它（D6）。
   let syncScheduler: () => void = () => {}
@@ -214,7 +221,8 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   }
   refreshLibrary = reload
 
-  // 刷新的调度器（D6）：只有人看着的时候才按组件声明的间隔读，没人看就停。
+  // 刷新的调度器（D6）：只有人看着的时候才按组件声明的间隔读——没人看就全停，一张卡没落进任何
+  // 一页的视口就不读它。
   const scheduler = createScheduler({
     // 卡片 id 全工作区唯一；定时链按全部看板算，不只看选中的那一块（D6、D21）。
     cards: () => context.workspace.list().flatMap((board) => board.instances.flatMap((instance) => {
@@ -222,12 +230,15 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       return everyMs === undefined || instance.source === undefined ? [] : [{ id: instance.id, everyMs }]
     })),
     viewers: () => live.viewers,
+    visible: () => live.visible,
     read: async (ids) => await readManyInto(context, ids),
     onError: (id, error) => {
       console.error(`widget-board: 定时读卡片 ${id} 失败：${(error as Error).message}`)
     },
   })
   const stopWatchingViewers = live.onViewers(() => { scheduler.sync() })
+  // 可见集合一变就重算一次：新看得见的卡立刻读，离开视口的卡不再排期（D6）。
+  const stopWatchingVisibility = live.onVisible(() => { scheduler.sync() })
   syncScheduler = () => { scheduler.sync() }
 
   const handler = createHandler(context)
@@ -322,26 +333,30 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   syncTools()
 
   // 可热改的字段由加载器提交进这一行的引用，提交时发这个事件；事件名属于加载器，不在本插件的
-  // 类型依赖里，所以按名字订阅一次。
+  // 类型依赖里，所以按名字订阅一次，拆除时退订（D18）。
   const onEvent = (ctx as { on?: (event: string, listener: () => void) => unknown }).on
-  onEvent?.call(ctx, 'loader/volatile-update', () => {
+  const unsubscribeVolatile = onEvent?.call(ctx, 'loader/volatile-update', () => {
     const next = readConfigField(config.enabled, true)
     if (next === enabled) return
     enabled = next
     syncTools()
     // 关掉时长连接一并收掉：页面不该停在一条不再有消息的连接上（D18）。
     if (!enabled) live.close()
-  })
+  }) as (() => void) | undefined
 
   ctx.effect(() => () => {
+    unsubscribeVolatile?.()
     disposeDshAccount()
     disposeMedia()
+    disposeTheme()
     disposeGithub()
+    disposeUsage()
     tools?.dispose()
     disposeSystemMetrics()
     disposeSystemMetricsAction()
     disposeHttpSource()
     stopWatchingViewers()
+    stopWatchingVisibility()
     scheduler.stop()
     stopBuiltin()
     stopUser()
