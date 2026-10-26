@@ -3,6 +3,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { waitFor } = require('./road.cjs')
+const { captureAppearance } = require('./appearance.cjs')
 async function itemExchangePass(page, check, board, props) {
   const evidence = path.resolve(__dirname, '../../.debug/evidence/T07')
   fs.mkdirSync(evidence, { recursive: true })
@@ -63,15 +64,10 @@ async function itemExchangePass(page, check, board, props) {
     await exchange.getByRole('button', { name: '重新解析与匹配', exact: true }).click()
     await exchange.getByRole('button', { name: '确认一次导入 1 项', exact: true }).waitFor()
     check('T07 文件上传预览不写入', await page.evaluate(async id => (await (await fetch(`api/widget-board/instance/${id}/content`)).json()).instance.state.items.length === 0, id))
-    for (const scheme of ['light', 'dark']) {
-      await page.emulateMedia({ colorScheme: scheme })
-      for (const width of [1920, 1440, 1024, 640]) {
-        await page.setViewportSize({ width, height: width === 1024 ? 768 : 900 })
-        await exchange.scrollIntoViewIfNeeded()
-        check(`T07 ${width}/${scheme} 预览无横向溢出`, await exchange.evaluate(element => element.scrollWidth <= element.clientWidth + 1))
-        await page.screenshot({ path: path.join(evidence, `preview-${width}-${scheme}.png`) })
-      }
-    }
+    await captureAppearance(page, evidence, 'preview', async (width, scheme) => {
+      await exchange.scrollIntoViewIfNeeded()
+      check(`T07 ${width}/${scheme} 预览无横向溢出`, await exchange.evaluate(element => element.scrollWidth <= element.clientWidth + 1))
+    }, [1920, 1440, 1024, 640], width => width === 1024 ? 768 : 900)
     await page.setViewportSize({ width: 1440, height: 900 })
     await exchange.getByRole('button', { name: '确认一次导入 1 项', exact: true }).click()
     check('T07 界面确认保存成功', await waitFor(async () => await page.evaluate(async id => (await (await fetch(`api/widget-board/instance/${id}/content`)).json()).instance.state.items.length === 1, id)))

@@ -27,6 +27,7 @@ async function campusPass(page, check) {
     await openDockAction(page, 'create')
     await page.locator('[data-dsh-widget-board-template="campus"]').click()
     await page.locator('[data-dsh-widget-campus-form]').waitFor()
+    await page.locator('[data-dsh-widget-campus-reminders] input[type="checkbox"]').uncheck()
     check('校园卡创建默认空白', await page.locator('[data-dsh-widget-campus-form]').innerText().then(text => text.includes('还没有事项') || text.includes('No items')))
     await page.locator('[data-dsh-widget-campus-add]').click()
     await page.locator('[data-dsh-widget-campus-field="title"]').fill('校园验收事项')

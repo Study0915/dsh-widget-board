@@ -27,8 +27,8 @@
       "timeZone": { "type": "string", "minLength": 1, "maxLength": 80, "default": "Asia/Shanghai" },
       "hasBackground": { "type": "boolean", "default": false },
       "hasIcon": { "type": "boolean", "default": false },
-      "reminderEnabled": { "type": "boolean", "default": false },
-      "reminderLeadHours": { "type": "number", "minimum": 0, "maximum": 168, "default": 24 }
+      "reminderEnabled": { "type": "boolean", "default": true },
+      "reminderLeadHours": { "type": "number", "enum": [0, 1, 24, 72], "default": 24 }
     },
     "allOf": [{ "if": { "required": ["schoolPreset"], "properties": { "schoolPreset": { "const": "custom" } } }, "then": { "required": ["customSchool"], "properties": { "customSchool": { "required": ["name"], "properties": { "name": { "minLength": 1 } } } } } }]
   },
