@@ -2,7 +2,7 @@
 
 ## 当前进度（2026-10-26）
 
-T04 已经用户确认验收通过，完成关卡通过，见 [T04-HANDOFF.md](T04-HANDOFF.md)。跨分支视觉统一已分别保存，九份共享样式/约束文件在四分支完全一致，原生和 Claude 主题视觉检查通过，T00/T01/T02 三条原分支的完整 verify 也已全部补验通过，见 [VISUAL-HANDOFF.md](VISUAL-HANDOFF.md)。T05 实现与完整自动验收已通过：505 项单元测试、真实宿主冒烟与尺寸矩阵；兼容主题十二项媒体回归通过，用户视觉核对仍 pending，见 [T05-HANDOFF.md](T05-HANDOFF.md)。T06 当前分支为 feat/campus-card、guard 为 T06；用户确认的宿主校验和固定画廊测试已补齐，并修正原生主题底部按钮裁剪。511项单元测试、独立尺寸矩阵和Claude主题43项专项通过；完整重跑仍出现浏览器故障及长时间无返回，未取得最终代码指纹的通过收据，用户视觉也保持pending，详见 [T06-HANDOFF.md](T06-HANDOFF.md)。
+T04 已经用户确认验收通过，见 [T04-HANDOFF.md](T04-HANDOFF.md)。跨分支视觉统一、T00/T01/T02 完整补验已通过，见 [VISUAL-HANDOFF.md](VISUAL-HANDOFF.md)。T05 自动验收通过、视觉状态保持原记录，见 [T05-HANDOFF.md](T05-HANDOFF.md)。T06 已获用户浅深色确认，完整 verify 与完成关卡通过：511项单元、真实宿主冒烟和尺寸矩阵；原生及Claude主题专项各45项通过，见 [T06-HANDOFF.md](T06-HANDOFF.md)。用户已要求接着完成 T07，继续使用 feat/campus-card，按 TASKS 激活 T07 后实施 CSV/ICS 文件交换。
 
 ## 直接复制的开工指令
 
