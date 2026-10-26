@@ -1,22 +1,8 @@
 /** 校园卡的实例数据；不保存账号、凭据或未经用户录入的期限。 */
+import type { CampusItem } from '@dsh-widget-board/contracts/campus'
+export type { Due, CampusStatus, CampusItem } from '@dsh-widget-board/contracts/campus'
 export type SchoolId = 'generic' | 'bupt' | 'bit' | 'xmu' | 'csu' | 'custom'
 export type Degree = 'undergraduate' | 'master' | 'doctoral'
-export type Due = { kind: 'date', date: string, timeZone: string } | { kind: 'instant', at: string, timeZone: string }
-export type CampusStatus = 'todo' | 'done' | 'cancelled'
-export interface CampusItem {
-  id: string
-  kind: 'deadline' | 'milestone'
-  title: string
-  category: string
-  due: Due
-  status: CampusStatus
-  url?: string
-  note?: string
-  source: string
-  sourceUid?: string
-  createdAt: string
-  updatedAt: string
-}
 export interface CampusLink { id: string, title: string, url: string }
 export interface CampusState {
   schemaVersion: 1

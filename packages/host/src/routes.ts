@@ -40,6 +40,7 @@ import { buildDocument, contentSecurityPolicy, freshNonce } from './document'
 import { groupRoutes } from './groups'
 import { capabilityRoutes } from './capabilities'
 import { contentRoutes } from './content/routes'
+import { itemImportRoutes } from './item-import/routes'
 import type { MediaStore } from './media/store'
 import { mediaRoutes } from './media/routes'
 import type { DraftStore } from './drafts/store'
@@ -664,7 +665,7 @@ export function createHandler(context: RouteContext): (req: HostRequest, res: Ho
     }
     const url = new URL(request.url ?? '/', 'http://board.invalid')
     const path = url.pathname.startsWith(PLUGIN_ROUTE) ? url.pathname.slice(PLUGIN_ROUTE.length) : ''
-    const matched = [...ROUTES, ...shareRoutes(context), ...settingsRoutes(), ...groupRoutes(), ...capabilityRoutes(), ...contentRoutes(context), ...mediaRoutes(), ...selfCheckRoutes(), ...sourceRoutes(context), ...draftRoutes(context.drafts), ...previewRoutes(context.previews)].flatMap((route) => {
+    const matched = [...ROUTES, ...shareRoutes(context), ...settingsRoutes(), ...groupRoutes(), ...capabilityRoutes(), ...contentRoutes(context), ...itemImportRoutes(context), ...mediaRoutes(), ...selfCheckRoutes(), ...sourceRoutes(context), ...draftRoutes(context.drafts), ...previewRoutes(context.previews)].flatMap((route) => {
       const match = route.pattern.exec(path)
       return match === null ? [] : [{ route, match }]
     })

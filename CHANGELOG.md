@@ -18,6 +18,7 @@
 - 新增按需加载的源码编辑器、独立草稿和真实沙箱预览。源码默认另存为独立用户组件，可保留当前卡片的内容与布局；明确选择更新全部实例后按 expectedHash 检查并发。组件写入、工具和导入共用来源保护与目录交换，二进制资源保持原字节。预览只更新局部状态，拒绝正式动作、能力调用和通知，并在关闭或过期时释放。
 - 创建器支持本地图片：受限解码、静态 WebP、按实例归属的分块读取与完整看板媒体备份；旧看板包继续可读。
 - 新增校园事务卡：三种学习阶段、四校公开入口与原创图案、通用和自定义学校；手动管理事项、里程碑、常用链接以及本地背景和图标。全天日期与精确时刻保留 IANA 时区，夏令时重复时刻需选择偏移。管理界面复用内容编辑器与修订冲突保护；每张卡最多一百条事项、十二个入口及64KiB状态。
+- 校园卡支持 CSV/ICS 文件交换：明确确认字段映射与时区、逐行修正或跳过、重复项更新或保留，以及带修订校验的原子导入。导出可选事项类型和完成状态，保留日期语义及受支持的日历扩展字段。
 
 ### 体验优化
 
@@ -43,6 +44,7 @@
 - Add an on-demand source editor, independent drafts and a real sandbox preview. Save source as a separate user type while retaining the current card's content and layout; explicitly updating all instances checks expectedHash. Definition, tool and import paths share source protection and directory replacement, preserving binary resource bytes. Preview updates local state only, rejects formal actions, capability calls and notifications, and releases sessions on close or expiry.
 - Create local image cards with bounded decoding, static WebP, instance-owned chunked reads and board media backups; older board packages remain readable.
 - Add a campus planner with three degree presets, four schools' public links and original patterns, generic and custom schools, personal deadlines, milestones, quick links and local photos/icons. All-day dates and exact times preserve IANA zones; ambiguous DST times require an explicit offset. Management uses the content editor and revision conflict protection, with up to 100 items, 12 links and 64KiB of state per card.
+- Campus cards support CSV/ICS exchange with confirmed field mapping and time zones, editable row previews, duplicate decisions and atomic revision-checked imports. Exports filter by item type and status while preserving date semantics and supported calendar extensions.
 
 ### Improvements
 
