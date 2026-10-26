@@ -17,7 +17,7 @@ const { join } = require('node:path')
 const { openPage, scratchHome, start } = require('./dsh-web.cjs')
 const { cardBox, centerCard, frameOf } = require('./frames.cjs')
 const { columnStep, layoutOf, settled, waitLayout } = require('./geometry.cjs')
-const { keepOnlyGallery, resetCards, resetLayout, setCardHeight } = require('./board.cjs')
+const { keepOnlyGallery, resetCards, resetLayout, setCardHeight, ensureFree } = require('./board.cjs')
 const { dockPass } = require('./dock.cjs')
 const { openLibrary } = require('./library.cjs')
 const { groupPass } = require('./group.cjs')
@@ -145,6 +145,8 @@ async function mainPass(page, problems) {
   check('插件的样式表挂上了文档', await page.evaluate((selector) => document.querySelector(selector) !== null, SHEET))
   await keepOnlyGallery(page)
   await resetCards(page)
+  // 默认看板是整齐行列（D29）：自由坐标的几何检查先把看板切回自由布局。
+  await ensureFree(page)
   await openBoard(page)
   await ensureTemplates(page)
   await resetLayout(page)
@@ -521,6 +523,7 @@ async function templatePass(page) {
  */
 async function layoutPass(page) {
   await resetLayout(page)
+  await ensureFree(page)
   await openBoard(page)
   await settled(page)
 
@@ -598,6 +601,7 @@ async function layoutPass(page) {
   const kept = await layoutOf(page, weatherId)
   check('重载之后布局还在', kept?.x === resized.x && kept?.w === resized.w && kept?.h === resized.h, JSON.stringify(kept))
 
+  await ensureFree(page)
   await resetLayout(page)
   await sleep(600)
 }
