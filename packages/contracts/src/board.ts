@@ -44,20 +44,20 @@ export interface InstanceGroup {
   template: GroupTemplate
 }
 
-/** 看板的两种排列偏好：自由位置与整齐行列（D29）。 */
+/** 看板的两种排列偏好：自由位置与整齐行列（D30）。 */
 export const ARRANGEMENT_MODES = ['free', 'aligned'] as const
 
 /** 一种排列偏好。 */
 export type ArrangementMode = (typeof ARRANGEMENT_MODES)[number]
 
-/** 整齐模式里一个排列单元想占的盒子：宽度按列，高度按根字号的倍数（D29）。 */
+/** 整齐模式里一个排列单元想占的盒子：宽度按列，高度按根字号的倍数（D30）。 */
 export interface AlignedBox {
   w: number
   h: number
 }
 
 /**
- * 整齐模式的偏好：按保存的顺序逐行铺开，每个单元记一个期望盒子（D29）。
+ * 整齐模式的偏好：按保存的顺序逐行铺开，每个单元记一个期望盒子（D30）。
  *
  * 只留顺序与期望宽高，像素坐标每次画的时候现算：窗口宽度与根字号变了，存下的东西不用重写。
  * `order` 用的是排列单元 id——普通实例 id，或组卡取正面那张实例的 id。
@@ -68,7 +68,7 @@ export interface AlignedArrangement {
 }
 
 /**
- * 一块看板的排列偏好（D29）：`mode` 决定卡片按哪一种规则摆放，`aligned` 只在整齐模式里有。
+ * 一块看板的排列偏好（D30）：`mode` 决定卡片按哪一种规则摆放，`aligned` 只在整齐模式里有。
  *
  * 自由模式的坐标继续存在每张卡的 `layout` 里；两种模式共用卡片、内容与状态，不复制卡片。
  */
@@ -78,7 +78,7 @@ export interface Arrangement {
 }
 
 /**
- * 新看板与第一次创建的那块看板用的排列偏好（D29）：整齐行列，空顺序。
+ * 新看板与第一次创建的那块看板用的排列偏好（D30）：整齐行列，空顺序。
  *
  * 旧看板读到的是 `free`，不给它们补这一份——已经存在的画廊不该在升级时自己换一种排法。
  */
@@ -163,7 +163,7 @@ export interface Board {
    */
   layoutRevision: number
   /**
-   * 排列偏好（D29）：旧看板读出来是 `free`，新建与默认看板是 `aligned`。
+   * 排列偏好（D30）：旧看板读出来是 `free`，新建与默认看板是 `aligned`。
    *
    * 缺席表示自由模式：读盘时在内存里补一份，下一次保存才写进文件。
    */
@@ -180,6 +180,8 @@ export interface WidgetSummary {
   /** 组件从哪儿来：内置、用户目录或插件（D17）。 */
   source: WidgetSource
   provider?: string
+  /** manifest 声明过的宿主能力（D24）；浏览器半边据此核对一次调用的声明。 */
+  capabilities?: string[]
   /** 看板上的最小盒子（D16）。 */
   minBox?: { w: number, h: number }
   /** 这个类型有没有可配置的 props 或凭据（D27）：设置按钮据此决定出不出现。 */
@@ -188,6 +190,13 @@ export interface WidgetSummary {
 
 /** `GET /boards` 的响应：整个工作区。 */
 export interface WorkspaceSnapshot {
+  /**
+   * 快照生成那一刻宿主已经推到第几条变更通知。
+   *
+   * 页面拿它与手头已合并的事件修订号比较：快照落后期内到达的事件，要在换上快照之后重放一遍，
+   * 免得被旧快照盖掉（D18）。
+   */
+  revision: number
   /** 当前选中的看板 id（D21）。 */
   active: string
   /** 全部看板，按索引里的次序；页面只挂当前看板（D21）。 */
@@ -445,7 +454,7 @@ export interface BoardLayoutRequest {
 }
 
 /**
- * `POST /boards/<id>/arrangement` 的请求体：一次提交整块看板的排列偏好（D29）。
+ * `POST /boards/<id>/arrangement` 的请求体：一次提交整块看板的排列偏好（D30）。
  *
  * 模式切换、整齐顺序与期望宽高一起提交；宿主核对布局修订号，过期时回 409 与当前快照。
  */

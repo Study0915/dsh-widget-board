@@ -13,7 +13,7 @@
    *
    * 浅色主题是白天、深色主题压暗一档，夜里再压一档。晴天给足蓝，阴雨天转灰。
    */
-  function paletteOf(scene, night, dark) {
+  function paletteOf(scene, night, dark, phase) {
     if (night) {
       var nightTable = {
         clear: ['#040a1e', '#0b1a38', '#173056', '#27496f'],
@@ -44,7 +44,23 @@
           storm: ['#333f4c', '#45535f', '#5d6d7c', '#8b98a5']
         }
     var row = table[scene] || table.cloudy
-    return { top: row[0], mid: row[1], low: row[2], haze: row[3] }
+    var palette = { top: row[0], mid: row[1], low: row[2], haze: row[3] }
+    if (!night && (phase === 'dawn' || phase === 'golden' || phase === 'dusk')) {
+      if (phase === 'dawn') {
+        palette = dark
+          ? { top: '#22364f', mid: '#687383', low: '#bf927f', haze: '#dcb9a4' }
+          : { top: '#3d638d', mid: '#9fa5b0', low: '#eec3aa', haze: '#fbe2d0' }
+      } else if (phase === 'golden') {
+        palette = dark
+          ? { top: '#1d344d', mid: '#697382', low: '#c18d66', haze: '#e2b68d' }
+          : { top: '#2d5f8d', mid: '#90a2b1', low: '#e8b77e', haze: '#f7d8a8' }
+      } else {
+        palette = dark
+          ? { top: '#1b2c46', mid: '#5e647c', low: '#b47a6e', haze: '#dca08c' }
+          : { top: '#344f78', mid: '#8c8fa5', low: '#de9a82', haze: '#f2bda5' }
+      }
+    }
+    return palette
   }
 
   /**
@@ -52,8 +68,13 @@
    *
    * `lit` 到 `deep` 是受光面到最深处，用来把每个圆球画成有圆面的球；`rim` 是上缘那道受光的亮线。
    */
-  function cloudTone(scene, night, dark) {
+  function cloudTone(scene, night, dark, phase) {
     if (night) return { lit: '#e9effc', mid: '#b3c4da', shade: '#63788f', deep: '#3c5068', rim: 'rgba(255,255,255,0.72)' }
+    if (phase === 'golden' || phase === 'dawn' || phase === 'dusk') {
+      return dark
+        ? { lit: '#f0d9c1', mid: '#c9b4a5', shade: '#887b79', deep: '#5b565d', rim: 'rgba(255,235,205,0.76)' }
+        : { lit: '#fff3df', mid: '#f0d3b7', shade: '#b7978c', deep: '#7c6b6c', rim: 'rgba(255,246,224,0.92)' }
+    }
     if (dark) return { lit: '#ffffff', mid: '#d7e4f2', shade: '#93aac0', deep: '#6d859c', rim: 'rgba(255,255,255,0.8)' }
     return { lit: '#ffffff', mid: '#eaf3fb', shade: '#b4cadd', deep: '#93aec5', rim: 'rgba(255,255,255,0.92)' }
   }
@@ -92,20 +113,23 @@
    * @param alpha - 整体不透明度。
    * @param haloOnly - 只画光晕，不画日轮。
    */
-  function paintCelestial(ctx, w, h, night, scene, pulse, alpha, haloOnly) {
-    var radius = h * (night ? 0.095 : 0.125)
-    var cx = w * (night ? 0.76 : 0.74)
-    var cy = h * (night ? 0.24 : 0.22)
+  function paintCelestial(ctx, w, h, night, scene, pulse, alpha, haloOnly, phase) {
+    var warm = phase === 'golden' || phase === 'dawn' || phase === 'dusk'
+    var spots = { dawn: [0.3, 0.35], day: [0.74, 0.22], golden: [0.64, 0.3], dusk: [0.66, 0.4] }
+    var spot = spots[phase] || spots.day
+    var radius = h * (night ? 0.095 : warm ? 0.14 : 0.125)
+    var cx = w * (night ? 0.76 : spot[0])
+    var cy = h * (night ? 0.24 : spot[1])
     var veiled = scene === 'rain' || scene === 'snow' || scene === 'storm' || scene === 'overcast'
     ctx.save()
     // 调用方可能已经压过一层不透明度，这里乘上去而不是覆盖它。
     ctx.globalAlpha = ctx.globalAlpha * (alpha === undefined ? 1 : alpha)
     var scale = 1 + pulse * 0.04
     var halo = ctx.createRadialGradient(cx, cy, radius * 0.6, cx, cy, radius * 6 * scale)
-    halo.addColorStop(0, night ? 'rgba(206,226,255,0.22)' : 'rgba(255,246,214,0.3)')
-    halo.addColorStop(0.2, night ? 'rgba(190,216,250,0.1)' : 'rgba(255,238,190,0.13)')
-    halo.addColorStop(0.5, night ? 'rgba(175,205,245,0.035)' : 'rgba(255,232,175,0.045)')
-    halo.addColorStop(1, night ? 'rgba(150,185,235,0)' : 'rgba(255,226,160,0)')
+    halo.addColorStop(0, night ? 'rgba(206,226,255,0.22)' : warm ? 'rgba(255,216,164,0.4)' : 'rgba(255,246,214,0.3)')
+    halo.addColorStop(0.2, night ? 'rgba(190,216,250,0.1)' : warm ? 'rgba(255,188,128,0.17)' : 'rgba(255,238,190,0.13)')
+    halo.addColorStop(0.5, night ? 'rgba(175,205,245,0.035)' : warm ? 'rgba(255,170,110,0.06)' : 'rgba(255,232,175,0.045)')
+    halo.addColorStop(1, night ? 'rgba(150,185,235,0)' : warm ? 'rgba(255,150,90,0)' : 'rgba(255,226,160,0)')
     ctx.fillStyle = halo
     ctx.fillRect(cx - radius * 7, cy - radius * 7, radius * 14, radius * 14)
     if (haloOnly === true) {
@@ -440,6 +464,23 @@
     ctx.globalAlpha = 1
   }
 
+  /** 黎明、黄金时刻与暮色在低空再压一层暖光，天空才不是一块平色。 */
+  function paintHorizonGlow(ctx, w, h, phase, night) {
+    if (night || !phase || phase === 'day') return
+    var top = phase === 'golden' ? 'rgba(255,196,120,0)' : phase === 'dawn' ? 'rgba(255,190,170,0)' : 'rgba(255,130,100,0)'
+    var mid = phase === 'golden' ? 'rgba(255,186,108,0.17)' : phase === 'dawn' ? 'rgba(255,176,160,0.13)' : 'rgba(255,132,102,0.15)'
+    var bottom = phase === 'golden' ? 'rgba(255,210,150,0.1)' : phase === 'dawn' ? 'rgba(255,200,180,0.08)' : 'rgba(255,150,120,0.09)'
+    var glow = ctx.createLinearGradient(0, h * 0.28, 0, h)
+    glow.addColorStop(0, top)
+    glow.addColorStop(0.62, mid)
+    glow.addColorStop(1, bottom)
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    ctx.fillStyle = glow
+    ctx.fillRect(0, 0, w, h)
+    ctx.restore()
+  }
+
   /**
    * 画天：天光、太阳或月亮、云。城市挡在它前面，所以云要画在这一层。
    *
@@ -449,24 +490,26 @@
    * @param scene - `clear`、`cloudy`、`overcast`、`rain`、`snow` 或 `storm`。
    * @param night - 是否夜里。
    * @param dark - 是否深色主题。
+   * @param phase - `dawn`、`day`、`golden`、`dusk` 或 `night`。
    */
-  function paintSky(ctx, w, h, scene, night, dark) {
-    var palette = paletteOf(scene, night, dark)
-    var tone = cloudTone(scene, night, dark)
+  function paintSky(ctx, w, h, scene, night, dark, phase) {
+    var palette = paletteOf(scene, night, dark, phase)
+    var tone = cloudTone(scene, night, dark, phase)
     paintSkyGradient(ctx, w, h, palette)
-    paintCelestial(ctx, w, h, night, scene, 0, 1)
+    paintHorizonGlow(ctx, w, h, phase, night)
+    paintCelestial(ctx, w, h, night, scene, 0, 1, false, phase)
     var bodyX = w * (night ? 0.76 : 0.74)
     var bodyY = h * (night ? 0.24 : 0.22)
     if (scene === 'clear' || scene === 'cloudy') {
       // 远处几朵积云烘进这一层：它们不动，动的是 main.js 逐帧搬的近处那几朵。
       // 烘的时候避开日轮与月轮：晴天里那轮日月是主角，不能被云盖住。
       var rand = seeded(scene === 'clear' ? 11 : 23)
-      var count = scene === 'clear' ? 4 : 6
-      var clearance = h * 0.26
+      var count = scene === 'clear' ? 3 : 4
+      var clearance = h * 0.24
       for (var i = 0; i < count; i += 1) {
-        var size = h * (0.26 + rand() * 0.22)
+        var size = h * (0.2 + rand() * 0.18)
         var x = rand() * w
-        var y = h * (0.12 + rand() * 0.26)
+        var y = h * (0.12 + rand() * 0.24)
         for (var attempt = 0; attempt < 6; attempt += 1) {
           var dx = x - bodyX
           var dy = y - bodyY

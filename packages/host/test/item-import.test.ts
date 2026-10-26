@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import Papa from 'papaparse'
 import { readFileSync } from 'node:fs'
-import { MESSAGE_LIMIT } from '@dsh-widget-board/contracts'
+import { PARENT_MESSAGE_LIMIT } from '@dsh-widget-board/contracts'
 import { checkContentBudget, handshakeBytes } from '../src/content/validate'
 import type { ItemImportRequest } from '@dsh-widget-board/contracts/item-import'
 import { EMPTY_CAMPUS_STATE } from '@dsh-widget-board/model/campus/model'
@@ -29,8 +29,10 @@ describe('校园文件交换', () => {
   it('单卡容量合格时仍拒绝握手及全板额度超限', () => {
     const state = { ...EMPTY_CAMPUS_STATE, items: csv(csvTemplate()).rows.map(row => row.item!) }
     const manifest = JSON.parse(readFileSync(new URL('../../widgets/campus/widget.json', import.meta.url), 'utf8'))
-    const bytes = handshakeBytes({ ...manifest, text: { zh: '中'.repeat(MESSAGE_LIMIT) } }, { state })
+    const bytes = handshakeBytes({ ...manifest, text: { zh: '中'.repeat(PARENT_MESSAGE_LIMIT) } }, { state })
     expect(() => checkContentBudget(state, { requestBytes: 0, requestLimit: 1, otherStateBytes: 0, handshakeBytes: bytes })).toThrow('握手')
+    expect(() => checkContentBudget(state, { requestBytes: 0, requestLimit: 1, otherStateBytes: 0, handshakeBytes: PARENT_MESSAGE_LIMIT })).not.toThrow()
+    expect(() => checkContentBudget(state, { requestBytes: 0, requestLimit: 1, otherStateBytes: 0, handshakeBytes: PARENT_MESSAGE_LIMIT + 1 })).toThrow('握手')
     expect(() => checkContentBudget(state, { requestBytes: 0, requestLimit: 1, otherStateBytes: 1024 * 1024, handshakeBytes: 0 })).toThrow('合计')
   })
   it('CSV模板BOM和全天日期往返，显式确认中文映射', () => {

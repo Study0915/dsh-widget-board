@@ -6,7 +6,7 @@
  * 的请求不必编译 schema。
  */
 import type { ContentIssue, WidgetManifest } from '@dsh-widget-board/contracts'
-import { MESSAGE_LIMIT } from '@dsh-widget-board/contracts'
+import { PARENT_MESSAGE_LIMIT } from '@dsh-widget-board/contracts'
 import { BOARD_STATE_BYTES_LIMIT, STATE_BYTES_LIMIT } from '../limits'
 import { Refusal } from '../refusal'
 import { stateBytes } from '../state'
@@ -19,7 +19,7 @@ export interface ContentBudget {
   requestLimit: number
   /** 这块看板上其余卡片已经占用的状态字节。 */
   otherStateBytes: number
-  /** 只读的校验报告：`MESSAGE_LIMIT` 是 iframe 的握手额度。 */
+  /** 只读的校验报告：`PARENT_MESSAGE_LIMIT` 是父页面发给 iframe 的握手额度。 */
   handshakeBytes: number
 }
 
@@ -60,8 +60,8 @@ export function checkContentBudget(state: unknown, budget: ContentBudget): void 
   if (total > BOARD_STATE_BYTES_LIMIT) {
     throw new Refusal(413, `这块看板的状态合计超过 ${String(BOARD_STATE_BYTES_LIMIT)} 字节：${String(total)} 字节`, { code: 'board-state-too-large' })
   }
-  if (budget.handshakeBytes > MESSAGE_LIMIT) {
-    throw new Refusal(413, `这张卡的握手消息超过 ${String(MESSAGE_LIMIT)} 字节：${String(budget.handshakeBytes)} 字节`, { code: 'handshake-too-large' })
+  if (budget.handshakeBytes > PARENT_MESSAGE_LIMIT) {
+    throw new Refusal(413, `这张卡的握手消息超过 ${String(PARENT_MESSAGE_LIMIT)} 字节：${String(budget.handshakeBytes)} 字节`, { code: 'handshake-too-large' })
   }
 }
 

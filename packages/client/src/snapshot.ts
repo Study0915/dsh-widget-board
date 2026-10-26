@@ -13,8 +13,6 @@ import type {
   BoardLayoutRequest,
   BoardLayoutSaved,
   BoardRenameRequest,
-  CardContentModel,
-  CardContentSaved,
   CardLayout,
   CardSettings,
   ContentIssue,
@@ -24,18 +22,14 @@ import type {
   GroupRemoveRequest,
   GroupSide,
   InstanceAddRequest,
-  InstanceComposeRequest,
-  InstanceContentRequest,
   InstanceCredentialRequest,
   InstancePropsRequest,
   InstanceStateRequest,
   RequestLogEntry,
-  WidgetFormModel,
   WorkspaceSnapshot,
 } from '@dsh-widget-board/contracts'
 import {
   boardActivatePath,
-  boardComposePath,
   boardArrangementPath,
   boardGroupPath,
   boardInstancePath,
@@ -47,7 +41,6 @@ import {
   groupSlotPath,
   instanceActionPath,
   instanceCallPath,
-  instanceContentPath,
   instanceCredentialPath,
   instanceDataPath,
   instanceGrantPath,
@@ -58,13 +51,27 @@ import {
   instanceRevokePath,
   instanceSettingsPath,
   instanceStatePath,
-  libraryFormPath,
   refreshPath,
 } from '@dsh-widget-board/contracts'
+
+import type { ContentIssueSubject } from './snapshot-content'
 
 /** 读一份失败响应里的原因。 */
 async function errorOf(response: Response, subject: string): Promise<string> {
   return (await failureOf(response, subject)).message
+}
+
+/**
+ * 宿主拒绝了一次请求：错误文本之外保留宿主给的 `code` 与整个错误体。
+ *
+ * 界面与调用方按 `code` 区分超频（`state-rate-limited`）、超限（`state-too-large`）与导入冲突
+ * （`widget-conflict`）这些要不同处理的情况；`extra` 里带着各 code 自己的载荷（如冲突两边的哈希）。
+ */
+export class BoardError extends Error {
+  constructor(message: string, readonly code: string | undefined, readonly extra: Readonly<Record<string, unknown>>) {
+    super(message)
+    this.name = 'BoardError'
+  }
 }
 
 /**
@@ -93,15 +100,8 @@ export class PropsRejectedError extends Error {
   }
 }
 
-/**
- * 读一份失败响应：缺授权时给 `GrantRequiredError`，其余给普通错误。
- *
- * @param response - 失败的响应。
- * @param subject - 出错的这件事，写在消息开头。
- * @returns 抛出去的错误。
- */
 /** 一份失败响应的字段；两条失败路径都只读这几个键。 */
-interface FailureBody {
+interface FailureBody extends Record<string, unknown> {
   error?: string
   code?: string
   kind?: GrantKind
@@ -122,7 +122,7 @@ interface FailureBody {
  * @param subject - 出错的这件事，写在消息开头。
  * @returns 解出来的字段与拼好的消息。
  */
-async function failureBodyOf(response: Response, subject: string): Promise<{ body: FailureBody, message: string }> {
+export async function failureBodyOf(response: Response, subject: string): Promise<{ body: FailureBody, message: string }> {
   let body: FailureBody = {}
   try {
     body = await response.json() as FailureBody
@@ -132,16 +132,17 @@ async function failureBodyOf(response: Response, subject: string): Promise<{ bod
   return { body, message: body.error === undefined ? `${subject}：HTTP ${response.status}` : `${subject}：${body.error}` }
 }
 
-async function failureOf(response: Response, subject: string): Promise<Error> {
+/** 读一份失败响应：授权拒绝与其它宿主错误分别保留类型。 */
+export async function failureOf(response: Response, subject: string): Promise<Error> {
   const { body, message } = await failureBodyOf(response, subject)
   if (body.code === 'grant-required' && typeof body.id === 'string') {
     return new GrantRequiredError(message, body.kind ?? 'action', body.id, body.provider)
   }
-  return new Error(message)
+  return new BoardError(message, typeof body.code === 'string' ? body.code : undefined, body)
 }
 
 /** 一份响应体是不是工作区快照。 */
-function isWorkspace(value: unknown): value is WorkspaceSnapshot {
+export function isWorkspace(value: unknown): value is WorkspaceSnapshot {
   return Array.isArray((value as WorkspaceSnapshot | undefined)?.boards)
 }
 
@@ -177,7 +178,7 @@ async function snapshotBodyOf(response: Response, subject: string): Promise<Work
  * @throws {Error} 请求失败或响应不是工作区快照。
  */
 async function wrappedOf(response: Response, subject: string): Promise<{ id?: string, snapshot: WorkspaceSnapshot }> {
-  if (!response.ok) throw new Error(await errorOf(response, subject))
+  if (!response.ok) throw await failureOf(response, subject)
   const payload = await response.json() as { id?: unknown, snapshot?: unknown }
   if (!isWorkspace(payload.snapshot)) throw new Error(`${subject}：响应不是工作区快照`)
   return { ...(typeof payload.id === 'string' ? { id: payload.id } : {}), snapshot: payload.snapshot }
@@ -235,7 +236,7 @@ export async function renameBoard(id: string, title: string): Promise<WorkspaceS
  * 移除一块看板（D21）。
  *
  * @param id - 看板 id。
- * @returns 移除之后的工作区；移除的是最后一块时，里面是补上的那块空看板。
+ * @returns 移除之后的工作区；移除的是最后一块时，里面是补上的默认看板。
  * @throws {Error} 请求失败。
  */
 export async function removeBoard(id: string): Promise<WorkspaceSnapshot> {
@@ -268,6 +269,8 @@ export async function saveInstanceState(id: string, patch: unknown): Promise<voi
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
+    // 关页时的最后一次冲刷靠它活过页面的拆除；状态补丁远小于 keepalive 的 64 KiB 请求体上限。
+    keepalive: true,
   })
   if (!response.ok) throw new Error(await errorOf(response, '存不下这张卡的状态'))
 }
@@ -419,14 +422,14 @@ export async function saveBoardLayouts(boardId: string, layoutRevision: number, 
 }
 
 /**
- * 一次排列偏好提交的结果：宿主存下这份偏好，或修订号过期时给出当前工作区（D29）。
+ * 一次排列偏好提交的结果：宿主存下这份偏好，或修订号过期时给出当前工作区（D30）。
  */
 export type BoardArrangementResult =
   | { kind: 'saved', saved: BoardArrangementSaved }
   | { kind: 'stale', snapshot: WorkspaceSnapshot }
 
 /**
- * 把一块看板的排列偏好交给宿主（D29）：模式切换、整齐顺序与期望宽高一次提交。
+ * 把一块看板的排列偏好交给宿主（D30）：模式切换、整齐顺序与期望宽高一次提交。
  *
  * 修订号过期时宿主返回当前工作区，这里把它交回去让页面按宿主的那一份重画（D5）。
  *
@@ -636,114 +639,4 @@ export async function removeInstance(id: string): Promise<WorkspaceSnapshot> {
   return await snapshotOf(response, '移除不了这张卡片')
 }
 
-/**
- * 内容写入被宿主拒绝：带着逐字段的原因，界面按路径把原因放到对应的那一行上。
- *
- * `subject` 是被拒的那一份（props、data 或 state）：宿主的路径从这一份的根算起，界面要按它分节。
- * 与 `PropsRejectedError` 分开，因为内容写入还会因为额度与修订号失败；那两种不该被画成字段错误。
- */
-export class ContentRejectedError extends Error {
-  constructor(message: string, readonly issues: ContentIssue[], readonly subject?: ContentIssueSubject) {
-    super(message)
-    this.name = 'ContentRejectedError'
-  }
-}
-
-/** 内容写入的三份内容；宿主逐字段原因从各自那一份的根算起。 */
-export type ContentIssueSubject = 'props' | 'data' | 'state'
-
-/** 编辑器读到的那份修订号已经过期：宿主给了当前快照与最新修订号。 */
-export class ContentStaleError extends Error {
-  constructor(message: string, readonly revision: number | undefined, readonly snapshot: WorkspaceSnapshot | undefined) {
-    super(message)
-    this.name = 'ContentStaleError'
-  }
-}
-
-/**
- * 读一份内容写入的失败响应：字段原因、修订号过期与普通失败分开。
- *
- * @param response - 失败的响应。
- * @param subject - 出错的这件事，写在消息开头。
- * @returns 抛出去的错误。
- */
-async function contentFailureOf(response: Response, subject: string): Promise<Error> {
-  const { body, message } = await failureBodyOf(response, subject)
-  if (body.code === 'stale-revision') {
-    return new ContentStaleError(message, typeof body.revision === 'number' ? body.revision : undefined, isWorkspace(body.snapshot) ? body.snapshot : undefined)
-  }
-  if (Array.isArray(body.issues)) return new ContentRejectedError(message, body.issues, body.subject)
-  return new Error(message)
-}
-
-/**
- * 一次创建一张完整的卡片（技术契约 3）。
- *
- * @param boardId - 看板 id。
- * @param body - 组件、编辑器预览的那一版、props、data 与盒子。
- * @returns 新卡片的 id 与建完之后的工作区。
- * @throws {Error} 字段原因、修订号过期或普通失败。
- */
-export async function composeInstance(boardId: string, body: InstanceComposeRequest): Promise<{ id: string, snapshot: WorkspaceSnapshot }> {
-  const response = await fetch(boardComposePath(boardId), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!response.ok) throw await contentFailureOf(response, '建不了这张卡片')
-  const payload = await response.json() as { id?: unknown, snapshot?: unknown }
-  if (!isWorkspace(payload.snapshot) || typeof payload.id !== 'string') throw new Error('建不了这张卡片：响应形状不对')
-  return { id: payload.id, snapshot: payload.snapshot }
-}
-
-/**
- * 读一个组件的表单模型（技术契约 3）：创建器在还没建出实例时按它画表单与预览。
- *
- * @param id - 组件 id。
- * @returns 组件的 schema、文案与盒子。
- * @throws {Error} 请求失败或响应形状不对。
- */
-export async function fetchWidgetForm(id: string): Promise<WidgetFormModel> {
-  const response = await fetch(libraryFormPath(id), { headers: { accept: 'application/json' } })
-  if (!response.ok) throw await contentFailureOf(response, '读不了这个组件的表单')
-  const body = await response.json() as { widget?: WidgetFormModel }
-  if (typeof body?.widget !== 'object' || body.widget === null) throw new Error('读不了这个组件的表单：响应形状不对')
-  return body.widget
-}
-
-/**
- * 读一张卡的内容读模型（技术契约 3）。
- *
- * @param id - 卡片实例的 id。
- * @returns 实例、看板修订号与组件表单。
- * @throws {Error} 请求失败或响应形状不对。
- */
-export async function fetchCardContent(id: string): Promise<CardContentModel> {
-  const response = await fetch(instanceContentPath(id), { headers: { accept: 'application/json' } })
-  if (!response.ok) throw await contentFailureOf(response, '读不了这张卡的内容')
-  const model = await response.json() as CardContentModel
-  if (typeof model?.instance !== 'object' || model.instance === null || typeof model.widget !== 'object' || model.widget === null) {
-    throw new Error('读不了这张卡的内容：响应形状不对')
-  }
-  return model
-}
-
-/**
- * 保存一张卡的内容（技术契约 3）。
- *
- * @param id - 卡片实例的 id。
- * @param body - 读到的修订号与要改的那几项。
- * @returns 写入之后的修订号与存下来的内容。
- * @throws {Error} 字段原因、修订号过期或普通失败。
- */
-export async function saveCardContent(id: string, body: InstanceContentRequest): Promise<CardContentSaved> {
-  const response = await fetch(instanceContentPath(id), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!response.ok) throw await contentFailureOf(response, '存不下这张卡的内容')
-  const saved = await response.json() as CardContentSaved
-  if (typeof saved?.revision !== 'number') throw new Error('存不下这张卡的内容：响应形状不对')
-  return saved
-}
+export { ContentRejectedError, ContentStaleError, composeInstance, fetchWidgetForm, fetchCardContent, saveCardContent } from './snapshot-content'

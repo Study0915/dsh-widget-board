@@ -34,11 +34,11 @@ Every widget runs in its own sandboxed iframe: a strict CSP, no network and no c
 | Board in the sidebar | Switch board tabs, drag and tidy cards; the default board is filled on first launch |
 | More button on a tab | Rename or delete that board; right-clicking the tab opens the same menu without switching boards |
 |---|---|
-| Plus menu | Add, tidy, refresh; Add opens the floating library |
+| Plus menu | Add, tidy, refresh; Add opens the library as a full-height panel that rises from the bottom |
 | Card gear | Change the widget's props, fill in credentials, review and grant data sources and permissions |
 | Edit widget source | Load CodeMirror on demand; save a separate user type and apply it to the current card; updating all instances requires an explicit choice and a version check |
 | Source drafts and preview | Save, restore and delete drafts; preview uses the real sandbox without performing formal actions, capability calls or notifications |
-| Session tools | The agent lists, writes, places widgets and pushes data; `widget_show` draws one in the answer |
+| Session tools | The agent lists, writes, places widgets and pushes data; `widget_show` draws one in the answer. Only `widget_catalog` starts out visible; the rest appear after being named in its `expose` field |
 | `widgetBoard` service | Other plugins register widgets, data sources, actions and host capabilities |
 
 <hr>
@@ -95,6 +95,8 @@ The runtime suite owns pointer and keyboard behaviour for flip, magnetic and hol
 
 A `source` of `provider:name` names a data source a plugin registered. `credentials` adds key fields to the settings modal; the value goes to the host's credential service and the widget cannot read it. Declare a capability in the manifest and call it with `widget.call(id, args)`; arguments and results are checked against JSON Schema. The built-in "Rest today" widget gets its account this way: add a `GITHUB_TOKEN` under Credentials and the card lists the open issues on the repositories you maintain, with no username to fill in, and a click on a row opens it in a new tab.
 
+The built-in "Recent token usage" card binds the `widget-board:session.usage` source a plugin registers and re-reads it every 10 seconds; while nobody is watching the card it does not read at all, and the card itself keeps no timer. Its "today" and "all" windows merge the history dsh-usage recorded with the events since this plugin starts, and the card marks that source as "dsh-usage history" next to the date. When dsh-usage is not installed the live reading and its empty state stay and the source reads "History not installed"; when it is installed but cannot be read the source reads "History unavailable" instead, and neither case ever shows a fake zero. A selected session never merges history and reads "Realtime only". The history supplies the totals and the four parts for today and all; the latest call and the trend always come from live events, so a window with history but no live call still shows its totals and hides the latest call.
+
 A widget cannot navigate or open popups itself. To send a link out, call `widget.open(url)` from inside a click handler and the page wrapping the widget opens it; only `http` and `https` addresses are accepted.
 
 <hr>
@@ -128,7 +130,7 @@ Campus cards support in-board reminders. New cards default to 24-hour advance an
 
 Campus management supports CSV/ICS import and export. Expand “CSV / ICS 文件交换”, select a UTF-8 file, confirm the column mapping, target time zone and duplicate decisions, then commit the import. Rows can be corrected or skipped. Files are limited to 2MiB and 10,000 candidates, with 100 items and 64KiB of state per card. Export filters include item type and completion status. The CSV template contains demonstration data; use board packages for complete backups.
 
-In development; 0.1.3 is on npm. The right sidebar, the widget library page, widget version history and sharing/import are still to come.
+In development; 0.1.5 is on npm. The right sidebar, the widget library page, widget version history and sharing/import are still to come.
 
 ## License
 

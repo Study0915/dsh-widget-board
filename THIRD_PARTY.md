@@ -4,10 +4,11 @@
 
 校园事项的 IANA 时区及夏令时处理使用 **Luxon 3.7.2**（MIT，https://github.com/moment/luxon）。共享纯模型在构建时内联进标准校园组件；不请求外部时间服务。
 
-本插件随包发布两个精选库，构建时打进 `lib/runtime/libs/`，组件文档用到它们时内联：
+本插件随包发布三个精选库，构建时打进 `lib/runtime/libs/`，组件文档用到它们时内联：
 
 - **marked** — Markdown 解析器，MIT License，https://github.com/markedjs/marked
 - **highlight.js** — 代码高亮，BSD-3-Clause License，https://github.com/highlightjs/highlight.js
+- **Three.js** — WebGL 三维渲染，MIT License，https://github.com/mrdoob/three.js
 
 组件包与看板包的 zip 读写用 **fflate**（MIT License，https://github.com/101arrowz/fflate），内联进宿主半边的产物。
 

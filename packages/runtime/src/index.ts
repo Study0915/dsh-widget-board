@@ -12,7 +12,7 @@ import type {
   WidgetMessage,
   WidgetSize,
 } from '@dsh-widget-board/contracts'
-import { MESSAGE_LIMIT, boxClassesOf, isParentMessage, withinLimit } from '@dsh-widget-board/contracts'
+import { PARENT_MESSAGE_LIMIT, boxClassesOf, isParentMessage, withinLimit } from '@dsh-widget-board/contracts'
 import { installInspector, problemsOf } from './inspect'
 import { installMotionTemplates } from './motion'
 import { readMedia } from './media/read'
@@ -49,7 +49,10 @@ declare global {
 /** 握手消息：父页面验证来源之后才把端口递进来。 */
 const CONNECT = 'connect'
 
-/** 一次能力调用最长等多久；超时后前端不再等，宿主那一侧的 15 秒上限会先中止提供方。 */
+/**
+ * 一次能力调用最长等多久。宿主那一侧先中止提供方（`CALL_TIMEOUT_MAX_MS` 是它的上限），这里再留
+ * 一段余量收那条错误。
+ */
 const CALL_TIMEOUT_MS = 30_000
 
 /** 一帧的根节点，运行时往它上面写尺寸族、动画档位与列行数。 */
@@ -307,8 +310,8 @@ function adoptPort(next: MessagePort): void {
   port.onmessage = (event: MessageEvent) => {
     const message = event.data as unknown
     if (!isParentMessage(message)) return
-    if (!withinLimit(message)) {
-      port?.postMessage({ type: 'error', message: `消息超过 ${String(MESSAGE_LIMIT)} 字节的上限` })
+    if (!withinLimit(message, PARENT_MESSAGE_LIMIT)) {
+      port?.postMessage({ type: 'error', message: `消息超过 ${String(PARENT_MESSAGE_LIMIT)} 字节的上限` })
       return
     }
     receive(message)
