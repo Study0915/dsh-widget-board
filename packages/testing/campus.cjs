@@ -34,6 +34,28 @@ async function campusPass(page, check) {
     await page.locator('[data-dsh-widget-board-composer-submit]').click()
     await page.locator('[data-dsh-widget-board-composer]').waitFor({ state: 'detached' })
     const instance = await page.evaluate(async id => (await (await fetch('api/widget-board/boards')).json()).boards.find(board => board.id === id).instances[0], board)
+    const beforeRefusal = await content(instance.id)
+    const originalItem = instance.state.items[0]
+    const invalidStates = [
+      ['不存在的日期', { ...instance.state, items: [{ ...originalItem, due: { kind: 'date', date: '2026-02-30', timeZone: 'Asia/Shanghai' } }] }],
+      ['无效的事项时区', { ...instance.state, items: [{ ...originalItem, due: { ...originalItem.due, timeZone: 'Invalid/Zone' } }] }],
+      ['重复事项标识', { ...instance.state, items: [originalItem, originalItem] }],
+      ['危险的入口协议', { ...instance.state, links: [{ id: 'unsafe', title: '不合法入口', url: 'javascript:alert(1)' }] }],
+    ]
+    for (const [label, state] of invalidStates) {
+      const rejected = await save(instance.id, { state })
+      const after = await content(instance.id)
+      check(`宿主拒绝${label}且保留原内容`, rejected.status === 400 && after.revision === beforeRefusal.revision && JSON.stringify(after.instance) === JSON.stringify(beforeRefusal.instance))
+    }
+    const badZone = await save(instance.id, { props: { ...instance.props, timeZone: 'Invalid/Zone' } })
+    check('宿主拒绝配置中的无效时区', badZone.status === 400 && badZone.value.subject === 'props')
+    const rejectedCreation = await page.evaluate(async ({ board, props, state }) => {
+      const snapshot = async () => (await (await fetch('api/widget-board/boards')).json()).boards.find(entry => entry.id === board).instances.length
+      const before = await snapshot()
+      const response = await fetch(`api/widget-board/boards/${board}/compose`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ widget: 'campus', props, state }) })
+      return response.status === 400 && before === await snapshot()
+    }, { board, props: instance.props, state: invalidStates[0][1] })
+    check('宿主创建路径拒绝非法日期且无残留实例', rejectedCreation)
     const card = page.locator(`[data-instance="${instance.id}"]`).first()
     const frame = await (await card.locator('iframe').elementHandle()).contentFrame()
     await frame.waitForSelector('.campus__item-title')

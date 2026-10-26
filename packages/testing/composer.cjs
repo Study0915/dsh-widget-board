@@ -110,7 +110,7 @@ async function composerPass(page, check) {
   await openComposerFromMenu(page)
   check('菜单里的创建卡片打开创建器', await page.locator('[data-dsh-widget-board-composer]').count() === 1)
   const templates = await page.locator('[data-dsh-widget-board-template]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-dsh-widget-board-template')))
-  check('创建器列出可用模板', templates.join(',') === 'text,todo,links,countdown,image,advanced', templates.join(','))
+  check('创建器列出可用模板', templates.join(',') === 'text,todo,links,countdown,image,campus,advanced', templates.join(','))
 
   // C02：文本笔记 —— 标题与正文，提交之后卡片带着这两项内容出现。
   const before = (await cardsOf(page, 'markdown')).length
