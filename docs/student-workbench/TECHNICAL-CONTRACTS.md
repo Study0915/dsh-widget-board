@@ -6,7 +6,7 @@
 
 - 宿主是唯一正式写入者，工作区保存串行，临时文件写完再改名。
 - layoutRevision只随结构/排列变化，revision随内容保存变化。
-- 现有状态HTTP单次请求上限16KiB；单卡持久状态64KiB；整板状态1MiB；桥消息约64KiB。这四种限制分别保留。
+- 现有状态HTTP单次请求上限16KiB；单卡持久状态64KiB；整板状态1MiB。按用户批准的作者0.1.6契约，父页面发给组件的消息为320KiB，组件发给父页面仍为64KiB；各项分别校验。
 - 现有组件包最多64文件，单文件4MiB，总解压16MiB，压缩8MiB。看板包有自己的限制，不能随图片上传而无界扩大。
 - 组件iframe继续使用allow-scripts，CSP只允许受控脚本、样式和data/blob图片；无网络、父DOM或cookie。
 - InstanceFace只有id、widget、props。能力处理器需要归属信息时按真实id查询Workspace，不把前端props当权威。

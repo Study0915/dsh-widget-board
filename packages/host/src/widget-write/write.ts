@@ -8,12 +8,12 @@
  * 出来并验证，最后用同父目录的暂存→验证→交换替换旧目录。旧版本在交换之后才清理：读库时看到的是
  * 完整的一份，不是半写的（D5）。
  */
-import { mkdir, readdir, rename, rm, stat } from 'node:fs/promises'
+import { mkdir, rename, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { WidgetManifest, WidgetRoot, WidgetSource } from '@dsh-widget-board/contracts'
 import { isRecord } from '../guards'
-import { contentHash, manifestProblem, readWidget, writeTree } from '../library'
+import { manifestProblem, readWidget, writeTree } from '../library'
 import type { WidgetRecord } from '../library'
 import { Refusal } from '../refusal'
 import { buildDocument, freshNonce } from '../document'
@@ -354,44 +354,4 @@ export function binaryInputs(value: unknown): WidgetFileInput[] {
 export function isTextual(path: string): boolean {
   const lower = path.toLowerCase()
   return ['.html', '.css', '.js', '.mjs', '.json', '.txt', '.md', '.svg'].some((extension) => lower.endsWith(extension))
-}
-
-/**
- * 一个组件目录里除了文件还有没有别的东西：目录项与符号链接不进编辑器。
- *
- * @param dir - 组件目录。
- * @returns 目录里的子目录名。
- */
-export async function subdirectoriesOf(dir: string): Promise<string[]> {
-  try {
-    const entries = await readdir(dir, { withFileTypes: true })
-    return entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
-    throw error
-  }
-}
-
-/**
- * 一个路径是不是一个目录。
- *
- * @param path - 路径。
- * @returns 是目录时为真。
- */
-export async function isDirectory(path: string): Promise<boolean> {
-  try {
-    return (await stat(path)).isDirectory()
-  } catch {
-    return false
-  }
-}
-
-/**
- * 一组文件的内容哈希：与组件库算哈希的方式一致（D7）。
- *
- * @param files - 相对路径与内容。
- * @returns 十六进制摘要。
- */
-export function hashOf(files: Map<string, Buffer>): string {
-  return contentHash(files)
 }

@@ -26,7 +26,7 @@ import type { Route, RouteContext } from '../routes'
 import { isCardLayout } from '@dsh-widget-board/model'
 import { campusProps, campusState, isCampusSchema } from '@dsh-widget-board/model/campus/model'
 import { STATE_BYTES_LIMIT } from '../limits'
-import { instanceOf, stateBytes, withInstancePatched } from '../state'
+import { instanceOf, stateBytes, withArrangementUnits, withInstancePatched } from '../state'
 import { checkContentBudget, contentIssues, handshakeBytes } from './validate'
 import { mediaOf } from '../media/routes'
 import type { MediaBinding, InstanceMedia } from '@dsh-widget-board/contracts'
@@ -157,22 +157,22 @@ export function contentRoutes(context: RouteContext): Route[] {
         if (wanted.layout !== undefined && !isCardLayout(wanted.layout)) throw new Refusal(400, 'layout 的列号、跨列与高度不合法')
         // 创建请求的三项要么都在（模板全都给全），要么显式的 null；两种都过 schema，undefined 不算点名。
         const content = settle(record.manifest, wanted)
-        const board = context.workspace.board(boardId)
-        checkContentBudget(content.state ?? null, {
-          requestBytes: Buffer.byteLength(JSON.stringify(raw), 'utf8'),
-          requestLimit: CONTENT_LIMIT,
-          otherStateBytes: otherStateBytes(board, null),
-          handshakeBytes: handshakeBytes(record.manifest, { props: content.props ?? {}, data: content.data ?? null, state: content.state ?? null }),
-        })
         // 整张卡一次写进去：内容与状态都已经校验，写入失败时磁盘上还是原来那一份（D5）。
         const id = randomUUID()
         await bindMedia(context, `board:${boardId}`, wanted, async media => await context.workspace.save(boardId, (current) => {
+          // 队列里的 current 才包含其它窗口刚刚创建的卡片，额度与写入共同提交。
+          checkContentBudget(content.state ?? null, {
+            requestBytes: Buffer.byteLength(JSON.stringify(raw), 'utf8'),
+            requestLimit: CONTENT_LIMIT,
+            otherStateBytes: otherStateBytes(current, null),
+            handshakeBytes: handshakeBytes(record.manifest, { props: content.props ?? {}, data: content.data ?? null, state: content.state ?? null }),
+          })
           const added = instanceOf(record, current.instances, {
             props: content.props ?? {},
             ...(wanted.layout === undefined ? {} : { layout: wanted.layout }),
           })
           const composed: BoardInstance = { ...added, id, data: content.data ?? null, state: content.state ?? null, ...(media === undefined ? {} : { media }) }
-          return { ...current, instances: [...current.instances, composed] }
+          return withArrangementUnits({ ...current, instances: [...current.instances, composed] }, [], [{ id, box: { w: composed.layout.w, h: composed.layout.h } }])
         }, { layoutChanged: true, event: () => ({ type: 'board' }) }))
         json(response, 201, { id, snapshot: workspaceSnapshot(context) })
       },

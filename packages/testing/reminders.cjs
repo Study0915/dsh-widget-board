@@ -18,10 +18,13 @@ async function remindersPass(page, check, home) {
   }
   const original = (await call('boards', undefined, 'GET')).active
   await page.clock.setFixedTime(new Date('2026-10-26T00:59:00Z'))
-  const board = (await call('boards', { title: 'T08提醒验收' })).id
+  const created = await call('boards', { title: 'T08提醒验收' })
+  const board = created.id
+  // 离屏场景用自由坐标把占位卡放到下方；整齐模式会将两张卡排在同一行。
+  await call(`boards/${board}/arrangement`, { expectedLayoutRevision: created.snapshot.boards.find(entry => entry.id === board).layoutRevision, arrangement: { mode: 'free' } })
   const make = (id, changes = {}) => ({ id, title: `提醒验收${id}`, kind: 'deadline', category: '', status: 'todo', due: { kind: 'date', date: '2026-10-26', timeZone: 'Asia/Shanghai' }, source: 'manual', createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z', ...changes })
   const state = { schemaVersion: 1, items: [make('one'), make('two')], links: [], customCategories: [], reminderLedger: {} }
-  const id = (await call(`boards/${board}/compose`, { widget: 'campus', props: { reminderEnabled: true, reminderLeadHours: 0 }, state, layout: { x: 0, y: 0, w: 1, h: 22 } })).id
+  const id = (await call(`boards/${board}/compose`, { widget: 'campus', props: { reminderEnabled: false, reminderLeadHours: 0 }, state, layout: { x: 0, y: 0, w: 1, h: 22 } })).id
   const filler = (await call(`boards/${board}/compose`, { widget: 'markdown', props: {}, data: null, state: null, layout: { x: 0, y: 100, w: 1, h: 22 } })).id
   const content = () => call(`instance/${id}/content`, undefined, 'GET')
   const save = async changes => { const current = await content(); return call(`instance/${id}/content`, { expectedRevision: current.revision, ...changes }) }
@@ -35,11 +38,14 @@ async function remindersPass(page, check, home) {
     await card.scrollIntoViewIfNeeded()
     let frame = await (await card.locator('iframe').elementHandle()).contentFrame()
     await frame.waitForFunction(() => window.widget?.state?.items?.length === 2 && !window.widget.paused)
+    // 正常设置回传后才跨到期时刻，分钟周期从这次 onProps 开始；不依赖初始挂载的异步先后。
+    await save({ props: { reminderEnabled: true, reminderLeadHours: 0 } })
+    await frame.waitForFunction(() => window.widget.props.reminderEnabled === true && !window.widget.paused)
     check('N02 09点前没有提醒记录', Object.keys((await content()).instance.state.reminderLedger).length === 0)
     await page.clock.setFixedTime(new Date('2026-10-26T01:00:00Z'))
     console.log('等待真实的一分钟提醒检查，不修改计时器或通知实现')
     check('N01 每分钟检查并在保存后通知', await waitFor(async () => Object.keys((await content()).instance.state.reminderLedger).length === 2 && await badgeCount() === '1', 65000))
-    check('N05 多事项合并一条且未读提示包含摘要', (await page.locator('[data-dsh-widget-board-panel-icon]').getAttribute('title')).includes('2项'))
+    check('N05 多事项合并一条且未读提示包含摘要', (await page.locator('[data-dsh-widget-board-panel-icon]').getAttribute('title') ?? '').includes('2项'))
     await page.reload({ waitUntil: 'domcontentloaded' })
     await openBoard(page)
     await card.waitFor()

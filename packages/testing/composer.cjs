@@ -198,6 +198,7 @@ async function libraryEntryPass(page, check) {
   await page.locator('[data-dsh-widget-board-library-create]').click()
   const opened = await waitFor(async () => await page.locator('[data-dsh-widget-board-composer]').count() === 1, 10000)
   check('组件库头部也能打开创建器', opened)
+  await page.waitForSelector('[data-dsh-widget-board-library]', { state: 'detached', timeout: 5000 })
   check('打开创建器时组件库收起来了', await page.locator('[data-dsh-widget-board-library]').count() === 0)
   await page.locator('[data-dsh-widget-board-composer-close]').click()
   await waitFor(async () => await page.locator('[data-dsh-widget-board-composer]').count() === 0, 5000)

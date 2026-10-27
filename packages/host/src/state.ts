@@ -212,7 +212,7 @@ function isUnitId(value: unknown): value is string {
 export function isArrangement(value: unknown): value is Arrangement {
   if (!isRecord(value)) return false
   if (value.mode !== 'free' && value.mode !== 'aligned') return false
-  if (value.mode === 'free') return value.aligned === undefined
+  if (value.mode === 'free' && value.aligned === undefined) return true
   const aligned = value.aligned
   if (!isRecord(aligned)) return false
   const { order, boxes } = aligned
@@ -265,7 +265,7 @@ export function arrangementUnitsOf(board: Board): string[] {
  */
 export function withArrangement(board: Board): { board: Board, changed: boolean } {
   const arrangement = board.arrangement
-  if (arrangement === undefined || arrangement.mode === 'free') return { board, changed: false }
+  if (arrangement === undefined) return { board, changed: false }
   const aligned = arrangement.aligned
   if (aligned === undefined) return { board, changed: false }
   const units = arrangementUnitsOf(board)
@@ -286,7 +286,7 @@ export function withArrangement(board: Board): { board: Board, changed: boolean 
   }
   if (Object.keys(aligned.boxes).length !== kept.length) changed = true
   if (!changed) return { board, changed: false }
-  return { board: { ...board, arrangement: { mode: 'aligned', aligned: { order: kept, boxes } } }, changed: true }
+  return { board: { ...board, arrangement: { mode: arrangement.mode, aligned: { order: kept, boxes } } }, changed: true }
 }
 
 /** 一份盒子是不是合法的高度档与列数。 */
@@ -453,7 +453,7 @@ export function withInstanceAdded(
   id: string = randomUUID(),
 ): { board: Board, id: string } {
   const instance = { ...instanceOf(record, board.instances, options), id }
-  return { board: { ...board, instances: [...board.instances, instance] }, id }
+  return { board: withArrangement({ ...board, instances: [...board.instances, instance] }).board, id }
 }
 
 /**
@@ -468,7 +468,7 @@ export function withInstanceRemoved(board: Board, id: string): Board {
   const index = indexOf(board, id)
   const instances = [...board.instances]
   instances.splice(index, 1)
-  return { ...board, instances }
+  return withArrangement({ ...board, instances }).board
 }
 
 /**
@@ -543,7 +543,7 @@ export function withGroupAdded(
     ...instanceOf(back, [...board.instances, frontInstance], { layout }),
     group: { ...base, id, side: 'back' } satisfies InstanceGroup,
   }
-  return { board: { ...board, instances: [...board.instances, frontInstance, backInstance] }, id }
+  return { board: withArrangement({ ...board, instances: [...board.instances, frontInstance, backInstance] }).board, id }
 }
 
 /**
@@ -557,7 +557,7 @@ export function withGroupAdded(
 export function withGroupRemoved(board: Board, id: string): Board {
   const instances = board.instances.filter((instance) => instance.group?.id !== id)
   if (instances.length === board.instances.length) throw new Error(`看板上没有这一组：${id}`)
-  return { ...board, instances }
+  return withArrangement({ ...board, instances }).board
 }
 
 /**
@@ -623,7 +623,7 @@ export function withArrangementUnits(
   added: readonly { id: string, box: AlignedBox }[],
 ): Board {
   const arrangement = board.arrangement
-  if (arrangement === undefined || arrangement.mode !== 'aligned') return board
+  if (arrangement === undefined || (arrangement.mode === 'free' && arrangement.aligned === undefined)) return board
   const aligned = arrangement.aligned ?? { order: [], boxes: {} }
   const dropped = new Set(gone)
   const order: string[] = []
@@ -639,7 +639,7 @@ export function withArrangementUnits(
     order.push(entry.id)
     boxes[entry.id] = entry.box
   }
-  return { ...board, arrangement: { mode: 'aligned', aligned: { order, boxes } } }
+  return { ...board, arrangement: { mode: arrangement.mode, aligned: { order, boxes } } }
 }
 
 /** 一张卡片离开看板时，它代表的排列单元：普通卡是自己，组卡是整组（取正面那张的 id）。 */
@@ -676,7 +676,7 @@ export function groupUnitOf(added: Board, groupId: string): { id: string, box: A
  */
 export function withBoardArrangement(board: Board, arrangement: Arrangement): Board {
   if (!isArrangement(arrangement)) throw new Error('排列偏好的形状不合法')
-  if (arrangement.mode === 'free') return { ...board, arrangement: { mode: 'free' } }
+  if (arrangement.mode === 'free') return { ...board, arrangement: { ...board.arrangement, mode: 'free' } }
   const units = new Set(arrangementUnitsOf(board))
   const aligned = arrangement.aligned as NonNullable<Arrangement['aligned']>
   for (const id of aligned.order) {

@@ -2,9 +2,15 @@
 
 ## 2026-10-26 作者更新、受保护变更与PR准备
 
+用户已明确批准为修复缺陷而在工作区内修改。审阅发现的排列恢复、创建器排列引用、翻面组备份引用、并发整板状态额度、预览握手额度和未用辅助函数均属于本轮修复范围；上游PR发送继续等待最后批准。
+
 用户已批准在原目录内按职责拆分board.tsx与snapshot.ts：排列切换移入board-arrangement.ts，卡片内容与创建API移入snapshot-content.ts，原导出接口与行为保留。
 
-用户另批准将超过750行的宿主排列路由、运行成本验收分别移入arrangement-routes.ts与metrics.cjs，保留原行为和断言；T10只增加这四条明确路径，185文件上限、分支和其余保护不变。policy最终精确SHA256为dea6c143efa9955e39f6061a66e49d938727d4564b7332fc1176c2f48cd45d82。
+用户另批准将超过750行的宿主排列路由、运行成本验收分别移入arrangement-routes.ts与metrics.cjs，保留原行为和断言；当次T10只增加这四条明确路径，185文件上限、分支和其余保护不变。该次policy精确SHA256为dea6c143efa9955e39f6061a66e49d938727d4564b7332fc1176c2f48cd45d82。
+
+随后用户逐项批准10条审阅修复路径，policy推进至52abfee13e43cccb14b57146c5ad17e9b586a0fd7df23afb3bf10f2288765099。用户于2026-10-27明确批准最终五条路径方案，取代单路径和双路径方案；已按.debug/complete-bugfix-scope-plan.json登记state.ts、composer.cjs、reminders.cjs及demo的routes.ts、seed.ts，policy及local基线同步为2e8f0279bc5b821afcffe96c04eb9c70ded51d2c0b9c2d4ec24f05bdb73fd30f，其余规则不变，范围检查通过。
+
+用户于2026-10-27确认“接受当前集成版外观”，覆盖作者0.1.6集成后的真实桌面提醒设置浅深色截图。PR发送继续等待最终标题和正文的批准。
 
 用户要求汇总任务、更新作者代码、修复冲突、完整审阅，再提供PR正文并等待最后批准。作者更新固定为0.1.6提交9aa880a。用户明确批准采用新增6个动效令牌、grants无效记录报错保留原文件，以及父→组件320KiB/组件→父64KiB契约；并明确批准baseline.json仅推进这两个文件的repo/work精确SHA256、保留旧approvedHistory，认可收窄T10策略的local哈希。其它基线、guard代码、hooks和CSP不变。T10仅在集成分支处理该上游提交实际路径；贡献分支等具体差异整理后逐项登记。
 

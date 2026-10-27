@@ -489,7 +489,7 @@ export function BoardPage({ context }: BoardPageProps): ReactNode {
   /** 菜单上的「整理」交给当前选中的那块看板：它自己拿着画面上那一份排布。 */
   const onTidy = useCallback(() => { tidyRef.current?.() }, [])
 
-  const onToggleArrangement = useBoardArrangement({ activeBoard, busyRef, setBusy, apply, onArrangement, setFailure, refetch })
+  const onToggleArrangement = useBoardArrangement({ activeBoard, metrics, busyRef, setBusy, apply, onArrangement, setFailure, refetch })
   /** 栅格提交布局的忙碌：两道闸门（`busy` 状态与 `busyRef`）一起走，加卡、刷新才看得见它。 */
   const onBusyChange = useCallback((next: boolean): void => {
     busyRef.current = next

@@ -14,7 +14,6 @@ import { PLUGIN_ROUTE, grantKey } from '@dsh-widget-board/contracts'
 import { BOARD_TITLE_LIMIT } from '@dsh-widget-board/contracts'
 import type { RouteContext } from '../src/routes'
 import { createHandler } from '../src/routes'
-import { MY_BOARD_TITLE } from '../src/default-boards'
 import { readManyInto } from '../src/batch-reads'
 import type { GrantStore } from '../src/grants'
 import type { WidgetRecord } from '../src/library'
@@ -330,7 +329,7 @@ describe('看板的增删改与选中', () => {
     expect((JSON.parse(response.body) as { boards: Board[] }).boards).toHaveLength(1)
   })
 
-  it('移除最后一块看板时补上默认看板', async () => {
+  it('移除最后一块看板时补上空看板', async () => {
     const library = (await loadLibrary([{ dir: join(ROOT, 'packages', 'widgets'), source: 'builtin' }])).records
     const test = await harness(RECORD, false, library)
     const response = await test.send('POST', '/boards/board/remove')
@@ -339,8 +338,8 @@ describe('看板的增删改与选中', () => {
     expect(body.boards).toHaveLength(1)
     const replacement = body.boards[0] as Board
     expect(replacement.id).not.toBe('board')
-    expect(replacement.title).toBe(MY_BOARD_TITLE)
-    expect(replacement.instances.length).toBeGreaterThan(0)
+    expect(replacement.title).toBe('未命名看板')
+    expect(replacement.instances).toEqual([])
     expect(body.active).toBe(replacement.id)
     expect(test.events.at(-1)).toEqual({ type: 'board' })
   })
