@@ -68,7 +68,7 @@ export interface AlignedArrangement {
 }
 
 /**
- * 一块看板的排列偏好（D30）：`mode` 决定卡片按哪一种规则摆放，`aligned` 只在整齐模式里有。
+ * 一块看板的排列偏好（D30）：`mode` 决定当前排法，`aligned` 在自由模式下保留供恢复。
  *
  * 自由模式的坐标继续存在每张卡的 `layout` 里；两种模式共用卡片、内容与状态，不复制卡片。
  */

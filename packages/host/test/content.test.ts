@@ -24,6 +24,9 @@ import { openWorkspace } from '../src/workspace'
 import { BOARD_STATE_WRITES_PER_SECOND, STATE_WRITES_PER_SECOND, createRateLimiter } from '../src/limits'
 import { openDrafts } from '../src/drafts/store'
 import { createPreviews } from '../src/preview/store'
+import { contentHash } from '../src/library'
+import { boardFromPackage, validateBoardPackage } from '../src/media/board-package'
+import { packBoard, unpackBoard } from '../src/package'
 
 const ROOT = fileURLToPath(new URL('../../..', import.meta.url))
 
@@ -202,6 +205,48 @@ async function harness(overrides: { board?: Board } = {}): Promise<Harness> {
 }
 
 describe('创建完整卡片', () => {
+  it('并发创建按保存队列内的全板状态总量拒绝超额写入', async () => {
+    const initial = board()
+    initial.instances = Array.from({ length: 15 }, (_, index) => ({ ...initial.instances[0]!, id: `existing-${index}`, state: { tab: 1, padding: 'x'.repeat(65400) } }))
+    const test = await harness({ board: initial })
+    const body = JSON.stringify({ widget: 'weather', props: { city: '上海', unit: 'c' }, data: null, state: { tab: 1, padding: 'x'.repeat(39900) } })
+    const replies = await Promise.all([test.send('POST', '/boards/board/compose', body), test.send('POST', '/boards/board/compose', body)])
+    expect(replies.map(reply => reply.status).sort()).toEqual([201, 413])
+    const stored = await storedBoard(test.home)
+    expect(stored.instances).toHaveLength(16)
+    expect(stored.instances.reduce((total, instance) => total + Buffer.byteLength(JSON.stringify(instance.state)), 0)).toBeLessThanOrEqual(1024 * 1024)
+  })
+
+  it('创建器立即维护整齐偏好，无需重启补全', async () => {
+    const current = board()
+    current.version = 3
+    current.arrangement = { mode: 'aligned', aligned: { order: ['board-first', 'board-second'], boxes: { 'board-first': { w: 1, h: 22 }, 'board-second': { w: 1, h: 22 } } } }
+    const test = await harness({ board: current })
+    const response = await test.send('POST', '/boards/board/compose', JSON.stringify({ widget: 'weather', props: { city: '上海', unit: 'c' }, data: null, state: null }))
+    expect(response.status).toBe(201)
+    const id = JSON.parse(response.body).id as string
+    const stored = await storedBoard(test.home)
+    expect(stored.arrangement?.aligned?.order).toEqual(['board-first', 'board-second', id])
+    expect(stored.arrangement?.aligned?.boxes[id]).toEqual({ w: 1, h: 22 })
+  })
+
+  it('翻面组的整齐排列包校验及新id重映射往返', async () => {
+    const test = await harness()
+    const files = new Map(RECORD.files)
+    files.set('widget.json', Buffer.from(JSON.stringify(RECORD.manifest)))
+    const widget = { manifest: RECORD.manifest, hash: contentHash(files), files: Object.fromEntries([...files].map(([path, bytes]) => [path, bytes.toString('base64')])) }
+    const cards = ['front', 'back'].map(side => ({ id: side, widget: 'weather', props: { city: '上海', unit: 'c' }, layout: { x: 0, y: 0, w: 1, h: 22 }, group: { id: 'group', side: side as 'front' | 'back', template: 'flip' as const } }))
+    const pkg = unpackBoard(packBoard('组卡备份', cards, [widget], { arrangement: { mode: 'aligned', aligned: { order: ['front'], boxes: { front: { w: 1, h: 22 } } } } }))
+    const validated = await validateBoardPackage(test.context, pkg)
+    const restored = boardFromPackage({ ...board(), instances: [] }, pkg, validated.records)
+    expect(restored.instances).toHaveLength(2)
+    expect(restored.instances[0]?.group?.id).toBe(restored.instances[1]?.group?.id)
+    expect(restored.instances[0]?.group?.id).not.toBe('group')
+    expect(restored.arrangement?.aligned?.order).toEqual([restored.instances[0]?.id])
+    const invalid = { ...pkg, arrangement: { mode: 'aligned' as const, aligned: { order: ['group'], boxes: { group: { w: 1, h: 22 } } } } }
+    await expect(validateBoardPackage(test.context, invalid)).rejects.toThrow('排列引用不完整')
+  })
+
   it('一次写进 props、data、state 与盒子：回 201、新 id 与快照，磁盘上读得到这张卡', async () => {
     const test = await harness()
     const response = await test.send('POST', '/boards/board/compose', JSON.stringify({

@@ -28,6 +28,7 @@
 
 - 演示宿主补齐卡片请求日志读取：已有卡片返回空日志与统一条数上限，未知卡片仍返回 404，避免打开卡片设置时出现缺失路由错误。
 - 创建卡片与编辑内容弹窗补齐间距令牌，恢复表单、模板和预览的留白；输入控件统一使用宿主字体与正文行距。
+- 修复整齐模式切换后的偏好恢复、页面和工具增删的排列引用、翻面组看板包往返及并发创建的整板状态额度。预览握手采用父页面320KiB额度，状态仍为64KiB；删除最后一块看板后补空看板。能力提供方缺席可见，媒体分块复用已知能力预读；最近Token用量缩略图按高度收起放不下的分项。
 
 <h3 id="en-unreleased">New Features</h3>
 
@@ -49,6 +50,7 @@
 
 - Add request-log reads to the demo host: existing cards return an empty log with the shared entry limit, while unknown cards return 404, avoiding missing-route errors when opening card settings.
 - Restore spacing tokens in the card composer and content editor so forms, templates and previews retain their padding and gaps; use the host font and consistent body line height for inputs.
+- Fix restoration of aligned preferences, arrangement references after page and tool edits, grouped-board package round trips, and board-state limits during concurrent creation. Preview handshakes use the parent's 320KiB budget while state remains limited to 64KiB. Removing the last board creates an empty board. Missing capability providers remain visible; media chunks reuse successful capability preflight. Compact token-usage previews omit detail rows that do not fit.
 
 ## [0.1.6] - 2026-10-26
 

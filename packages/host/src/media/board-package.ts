@@ -9,7 +9,7 @@ import { checkFiles, type BoardPackage, type BoardPackageWidget } from '../packa
 import { normalizeWidgetPath } from '../widget-write/write'
 import { Refusal } from '../refusal'
 import type { RouteContext } from '../routes'
-import { instanceOf, stateBytes } from '../state'
+import { instanceOf, stateBytes, withArrangement } from '../state'
 import { checkContentBudget, contentIssues, handshakeBytes } from '../content/validate'
 import { checkedMedia } from './store'
 import { mediaOf } from './routes'
@@ -98,8 +98,8 @@ function validateGroups(pkg: BoardPackage): void {
   const arrangement = pkg.arrangement
   if (!arrangement) return
   if (arrangement.mode !== 'free' && arrangement.mode !== 'aligned') throw new Refusal(400, '排列模式不合法')
-  if (arrangement.mode === 'aligned') {
-    const units = new Set(pkg.cards.map(card => card.group?.id ?? card.id))
+  if (arrangement.mode === 'aligned' || arrangement.aligned !== undefined) {
+    const units = new Set(pkg.cards.filter(card => card.group === undefined || card.group.side === 'front').map(card => card.id))
     const aligned = arrangement.aligned
     if (units.has(undefined) || !aligned || !Array.isArray(aligned.order) || new Set(aligned.order).size !== units.size || aligned.order.length !== units.size || aligned.order.some(id => !units.has(id)) || typeof aligned.boxes !== 'object' || aligned.boxes === null || Array.isArray(aligned.boxes) || Object.keys(aligned.boxes).length !== units.size) throw new Refusal(400, '排列引用不完整')
     for (const id of aligned.order) {
@@ -119,13 +119,13 @@ export function boardFromPackage(board: Board, pkg: BoardPackage, records: Reado
     if (card.group && !ids.has(card.group.id)) ids.set(card.group.id, randomUUID())
     instances.push({ ...base, data: card.data ?? null, state: card.state ?? null, ...(card.media ? { media: card.media } : {}), ...(card.group ? { group: { ...card.group, id: ids.get(card.group.id) as string } } : {}) })
   }
-  const arrangement = pkg.arrangement?.mode === 'aligned' ? {
-    mode: 'aligned' as const, aligned: {
+  const arrangement = pkg.arrangement?.aligned !== undefined ? {
+    mode: pkg.arrangement.mode, aligned: {
       order: pkg.arrangement.aligned!.order.map(id => ids.get(id) as string),
       boxes: Object.fromEntries(Object.entries(pkg.arrangement.aligned!.boxes).map(([id, box]) => [ids.get(id) as string, box])),
     },
   } : pkg.arrangement
-  return { ...board, instances, ...(arrangement ? { arrangement } : {}) }
+  return withArrangement({ ...board, instances, ...(arrangement ? { arrangement } : {}) }).board
 }
 
 export async function exportedMedia(context: RouteContext, board: Board): Promise<Record<string, string>> {

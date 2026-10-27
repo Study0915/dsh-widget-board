@@ -10,6 +10,7 @@
  */
 import { randomBytes } from 'node:crypto'
 import type { PreviewSession, WidgetManifest } from '@dsh-widget-board/contracts'
+import { PARENT_MESSAGE_LIMIT } from '@dsh-widget-board/contracts'
 import type { DocumentAssets } from '../document'
 import { buildDocument, contentSecurityPolicy, freshNonce } from '../document'
 import { isRecord } from '../guards'
@@ -198,8 +199,8 @@ export function createPreviews(): PreviewStore {
       if (bytesOf(content.state) > PREVIEW_STATE_LIMIT) {
         throw new Refusal(413, `预览的状态超过 ${String(PREVIEW_STATE_LIMIT)} 字节`)
       }
-      if (handshakeBytes(record.manifest, content) + 8192 > PREVIEW_STATE_LIMIT) {
-        throw new Refusal(413, `预览的内容超过 ${String(PREVIEW_STATE_LIMIT)} 字节`)
+      if (handshakeBytes(record.manifest, content) + 8192 > PARENT_MESSAGE_LIMIT) {
+        throw new Refusal(413, `预览的内容超过 ${String(PARENT_MESSAGE_LIMIT)} 字节`)
       }
       if (sessions.size >= PREVIEW_LIMIT) {
         throw new Refusal(429, `同时最多 ${String(PREVIEW_LIMIT)} 个预览；关掉一个再试`, { code: 'preview-limit' })

@@ -259,13 +259,13 @@ describe('排列偏好（D30）', () => {
   it('切回自由模式只换偏好，卡片坐标不动', () => {
     const current = { ...board(), arrangement: { mode: 'aligned' as const, aligned: { order: ['first', 'second'], boxes: { first: { w: 1, h: 22 }, second: { w: 1, h: 22 } } } } }
     const next = withBoardArrangement(current, { mode: 'free' })
-    expect(next.arrangement).toEqual({ mode: 'free' })
+    expect(next.arrangement).toEqual({ ...current.arrangement, mode: 'free' })
     expect(next.instances).toEqual(current.instances)
   })
 
   it('排列单元的接上与去掉由 withArrangementUnits 完成', () => {
     const aligned = { mode: 'aligned' as const, aligned: { order: ['first'], boxes: { first: { w: 1, h: 22 } } } }
-    const added = withInstanceAdded({ ...board(), arrangement: aligned }, record('clock'))
+    const added = withInstanceAdded({ ...board(), instances: board().instances.slice(0, 1), arrangement: aligned }, record('clock'))
     const withUnit = withArrangementUnits(added.board, [], [{ id: added.id, box: { w: 1, h: 22 } }])
     expect(withUnit.arrangement?.aligned?.order).toEqual(['first', added.id])
     expect(withUnit.arrangement?.aligned?.boxes).toHaveProperty(added.id)

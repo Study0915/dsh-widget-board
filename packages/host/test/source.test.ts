@@ -567,6 +567,8 @@ describe('预览会话', () => {
     expect((await test.send('POST', '/preview', { files: { ...files, 'widget.json': JSON.stringify(manifest) }, props: {} })).status).toBe(400)
     delete manifest.props
     manifest.text = { big: { zh: 'x'.repeat(65000), en: 'x' } }
+    expect((await test.send('POST', '/preview', { files: { ...files, 'widget.json': JSON.stringify(manifest) } })).status).toBe(201)
+    manifest.text = { big: { zh: 'x'.repeat(320 * 1024), en: 'x' } }
     expect((await test.send('POST', '/preview', { files: { ...files, 'widget.json': JSON.stringify(manifest) } })).status).toBe(413)
   })
   it('新建后拿到一个不可猜测的 id，文档能画出来', async () => {
