@@ -173,9 +173,14 @@ function filesOf(manifest: WidgetManifest, files: readonly WidgetFileInput[]): {
 const writes = new Map<string, Promise<unknown>>()
 
 export async function writeWidgetType(options: Parameters<typeof writeUnlocked>[0]): Promise<WidgetWriteResult> {
-  const key = userRootOf(options.roots).dir
+  return await withUserWidgetWrite(options.roots, async () => await writeUnlocked(options))
+}
+
+/** 正常写入与导入恢复共用同一用户目录队列，版本核对和目录交换在队列内完成。 */
+export async function withUserWidgetWrite<T>(roots: readonly WidgetRoot[], change: () => Promise<T>): Promise<T> {
+  const key = userRootOf(roots).dir
   const previous = writes.get(key) ?? Promise.resolve()
-  const pending = previous.catch(() => undefined).then(async () => await writeUnlocked(options))
+  const pending = previous.catch(() => undefined).then(change)
   writes.set(key, pending)
   try {
     return await pending

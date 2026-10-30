@@ -22,6 +22,7 @@
       "time": { "type": "string", "format": "time", "maxLength": 5 },
       "allDay": { "type": "boolean" },
       "zone": { "type": "string", "maxLength": 40 },
+      "offsetMinutes": { "type": "integer", "minimum": -840, "maximum": 840 },
       "note": { "type": "string", "maxLength": 120 }
     }
   },
@@ -70,6 +71,8 @@
       "zh": "备注",
       "en": "Note"
     },
+    "props.offsetMinutes.label": { "zh": "UTC 偏移（分钟）", "en": "UTC offset (minutes)" },
+    "props.offsetMinutes.hint": { "zh": "仅重复时刻必须填，例如纽约夏令时 -240、标准时 -300；其它时间可留空", "en": "Required for ambiguous times, e.g. -240 or -300 in New York; otherwise optional" },
     "props.note.hint": {
       "zh": "一行说明，矮盒子里收起",
       "en": "One line of context; hidden in short boxes"
@@ -111,8 +114,8 @@
       "en": "minutes"
     },
     "invalidZone": {
-      "zh": "这个时区名读不出来，按本地时区计算",
-      "en": "Unknown time zone; counting in local time"
+      "zh": "时区无效，请填写 IANA 时区名",
+      "en": "Invalid IANA time zone"
     },
     "allDayHint": {
       "zh": "全天：按 {zone} 的 00:00 算",

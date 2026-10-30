@@ -2,11 +2,13 @@
  * 日期倒计时的脚本。
  *
  * 目标是一瞬间：`date` 与 `time` 是某个时区里的墙上时间，先在那个时区里读成 UTC 毫秒数再与此刻相减，
- * 所以换个时区看同一张卡，天数会跟着变；换算只借 `Intl.DateTimeFormat` 的 `timeZone`，不引时区表。
+ * 所以换个时区看同一张卡，天数会跟着变；Luxon 校验 IANA 时区与夏令时边界。
  *
- * 分钟精度就够，每 15 秒重算一次；暂停时停掉计时器，恢复时按此刻重算再启动（D16）。读不出来的时区名
- * 退回浏览器本地时区，并在界面上写一句说明，不让整张卡挂掉（D11）。
+ * 分钟精度就够，每 15 秒重算一次；暂停时停掉计时器，恢复时按此刻重算再启动（D16）。非法时区和
+ * 不存在的墙上时间显示原因；重复时间必须点名 UTC 偏移，不能静默选择（D11）。
  */
+import { DateTime } from 'luxon'
+
 (function () {
   var card = document.querySelector('.countdown-card')
   if (!card) return
@@ -37,7 +39,7 @@
   /** 由 props 定下来的那部分：目标时刻、时区与文案。 */
   var state = { target: null, missing: 'empty', allDay: true, zone: '', invalidZone: false, name: '', note: '' }
   /** 四个格式器都按当前时区重建，props 或语言变化时一起换掉。 */
-  var formats = { wall: null, day: null, date: null, weekday: null, time: null }
+  var formats = { day: null, date: null, weekday: null, time: null }
   /** 宿主把卡片判为离开视口时置真：计时器停掉，恢复时重算再启动（D16）。 */
   var paused = widget !== undefined && widget.paused === true
   var timer = 0
@@ -71,36 +73,30 @@
     return text
   }
 
-  /**
-   * 取用时区名；名字读不出来时退回浏览器本地时区并记下这一点。
-   *
-   * 这里只隔离一次读不出时区的失败（D11）：卡片照常倒计时，界面上写清用的是本地时区。
-   */
+  /** 时区不合法时保留可绘制的格式器，但停止倒计时并显示错误。 */
   function zoneOf(props) {
     var zone = typeof props.zone === 'string' ? props.zone.trim() : ''
     if (zone === '') zone = DEFAULT_ZONE
-    try {
-      new Intl.DateTimeFormat('en-GB', { timeZone: zone }).format(new Date())
-      return { zone: zone, invalid: false }
-    } catch (error) {
-      return { zone: '', invalid: true }
-    }
+    return DateTime.now().setZone(zone).isValid
+      ? { zone: zone, invalid: false }
+      : { zone: DEFAULT_ZONE, invalid: true }
   }
 
-  /** 某一瞬间在那个时区里的墙上时间，读成「按 UTC 拼出来的毫秒数」。 */
-  function wallOf(format, instant) {
-    var parts = format.formatToParts(new Date(instant))
-    var seen = {}
-    for (var index = 0; index < parts.length; index += 1) {
-      if (parts[index].type !== 'literal') seen[parts[index].type] = Number(parts[index].value)
+  /** 成熟时间库给出候选偏移；缺口不能被自动顺延，重复时间由用户明确选择。 */
+  function instantOf(date, time, offset) {
+    var value = DateTime.fromObject({ year: date.year, month: date.month, day: date.day, hour: time.hour, minute: time.minute }, { zone: state.zone })
+    if (!value.isValid || value.year !== date.year || value.month !== date.month || value.day !== date.day || value.hour !== time.hour || value.minute !== time.minute) {
+      state.missing = 'badDateTime'
+      return null
     }
-    return Date.UTC(seen.year, seen.month - 1, seen.day, seen.hour, seen.minute, seen.second)
-  }
-
-  /** 墙上时间换成一瞬间：先按偏差猜一次，再用目标时区的偏差修正，跨夏令时也落在正确的那一侧。 */
-  function instantOf(wall, format) {
-    var guess = wall - (wallOf(format, wall) - wall)
-    return wall - (wallOf(format, guess) - guess)
+    var choices = value.getPossibleOffsets()
+    if (choices.length > 1 && !Number.isInteger(offset)) {
+      state.missing = 'ambiguousTime'
+      return null
+    }
+    var selected = offset === undefined ? value : choices.find(function (choice) { return choice.offset === offset })
+    if (!selected) { state.missing = 'badOffset'; return null }
+    return selected.toMillis()
   }
 
   /** 解析 YYYY-MM-DD；不成立的日期（例如 2 月 30 日）读成 null。 */
@@ -126,19 +122,9 @@
     return { hour: hour, minute: minute }
   }
 
-  /** 四个格式器都按当前时区与语言建：墙上时间换算、当天判定、右上角的日期与时刻。 */
+  /** 四个格式器都按当前时区与语言建，只负责显示，不负责墙上时间换算。 */
   function buildFormats() {
     var zone = state.zone === '' ? undefined : state.zone
-    formats.wall = new Intl.DateTimeFormat('en-GB', {
-      timeZone: zone,
-      hourCycle: 'h23',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit'
-    })
     formats.day = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' })
     formats.date = new Intl.DateTimeFormat(isZh() ? 'zh-CN' : 'en', { timeZone: zone, year: 'numeric', month: 'short', day: 'numeric' })
     formats.weekday = new Intl.DateTimeFormat(isZh() ? 'zh-CN' : 'en', { timeZone: zone, weekday: 'short' })
@@ -152,14 +138,8 @@
     write(el.minutesLabel, label('minutes', isZh() ? '分钟' : 'minutes'))
   }
 
-  /** 一行说明：时区读不出来时说明按本地时间算；全天项目说明从当天的 00:00 起算。 */
+  /** 一行说明：全天项目从目标时区当天的 00:00 起算。 */
   function paintHint() {
-    if (state.invalidZone) {
-      write(el.hint, label('invalidZone', isZh() ? '这个时区名读不出来，按本地时区计算' : 'Unknown time zone; counting in local time'))
-      el.hint.dataset.warn = 'true'
-      el.hint.hidden = false
-      return
-    }
     el.hint.dataset.warn = 'false'
     var template = state.allDay
       ? label('allDayHint', isZh() ? '全天：按 {zone} 的 00:00 算' : 'All day: 00:00 in {zone}')
@@ -181,7 +161,13 @@
     el.empty.hidden = false
     el.note.hidden = true
     el.hint.hidden = true
-    write(el.empty, label(state.missing, isZh()
+    var reasons = {
+      invalidZone: ['时区无效，请填写 IANA 时区名', 'Invalid IANA time zone'],
+      badDateTime: ['这个时区不存在该时刻，请修改日期或时间', 'That wall time does not exist in this time zone'],
+      ambiguousTime: ['该时刻重复，请在设置里填写明确的 UTC 偏移分钟', 'Ambiguous time: choose an explicit UTC offset in minutes'],
+      badOffset: ['UTC 偏移与该时刻的时区不匹配', 'The UTC offset does not match this local time']
+    }
+    write(el.empty, label(state.missing, reasons[state.missing] ? reasons[state.missing][isZh() ? 0 : 1] : isZh()
       ? (state.missing === 'badTime' ? '时刻读不出来，写成 HH:mm；全天项目不看这一项' : '还没设日期，在设置里填一个')
       : (state.missing === 'badTime' ? 'The time could not be read; write it as HH:mm' : 'No date yet — set one in the card settings')))
     write(el.kicker, '')
@@ -268,8 +254,8 @@
     var date = parseDate(props.date)
     var time = state.allDay ? { hour: 0, minute: 0 } : parseTime(props.time)
     // 读不出来的日期与时刻各给一句原因：静悄悄按 00:00 算，用户会以为卡片算错了。
-    state.missing = date === null ? 'empty' : (time === null ? 'badTime' : '')
-    state.target = state.missing === '' ? instantOf(Date.UTC(date.year, date.month - 1, date.day, time.hour, time.minute, 0), formats.wall) : null
+    state.missing = found.invalid ? 'invalidZone' : date === null ? 'empty' : (time === null ? 'badTime' : '')
+    state.target = state.missing === '' ? instantOf(date, time, props.offsetMinutes) : null
 
     write(el.title, state.name === '' ? label('title', isZh() ? '倒数日' : 'Countdown') : state.name)
     write(el.note, state.note)

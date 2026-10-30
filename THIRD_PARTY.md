@@ -12,7 +12,9 @@
 
 组件包与看板包的 zip 读写用 **fflate**（MIT License，https://github.com/101arrowz/fflate），内联进宿主半边的产物。
 
-高级源码编辑器用 **CodeMirror 6**（MIT License，https://github.com/codemirror/view），构建时打进 `lib/client.js`；源码面板在进入高级模式时才按需加载它，用到的部分有 `@codemirror/view`、`@codemirror/state`、`@codemirror/commands`、`@codemirror/search`、`@codemirror/language`、`@codemirror/autocomplete`、`@codemirror/lint`、`@codemirror/lang-html`、`@codemirror/lang-css`、`@codemirror/lang-javascript`、`@codemirror/lang-json` 与 `@codemirror/theme-one-dark`。
+高级源码编辑器用 **CodeMirror 6**（MIT License，https://github.com/codemirror/view），构建时打进 `lib/client.source-editor.js`；源码面板在进入高级模式时才按需加载它，用到的部分有 `@codemirror/view`、`@codemirror/state`、`@codemirror/commands`、`@codemirror/search`、`@codemirror/language`、`@codemirror/autocomplete`、`@codemirror/lint`、`@codemirror/lang-html`、`@codemirror/lang-css`、`@codemirror/lang-javascript`、`@codemirror/lang-json` 与 `@codemirror/theme-one-dark`。
+
+倒计时的IANA时区及夏令时处理使用 **Luxon 3.7.2**（MIT，https://github.com/moment/luxon），构建时内联进组件脚本，不请求外部时间服务。
 
 「月历」与「今日运势」两个内置组件随目录带一份 **lunar-javascript**（MIT License，https://github.com/6tail/lunar-javascript），放在各自的 `vendor/` 下，经 manifest 的 `scripts` 内联进组件文档；农历、节气、干支与宜忌都由它算。文件原样保留，未做修改。
 

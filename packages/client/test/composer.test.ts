@@ -7,6 +7,38 @@ import { describe, expect, it } from 'vitest'
 import { SCHEMA_DEPTH, fieldsOfTree, labelOf } from '../src/composer/schema'
 import { formPathOf, formResult } from '../src/composer/fields'
 import { TEMPLATES, seedOf, templateOf } from '../src/composer/templates'
+import { buildSync } from 'esbuild'
+import { runInNewContext } from 'node:vm'
+import { resolve } from 'node:path'
+
+const countdownScript = buildSync({ entryPoints: [resolve('packages/widgets/countdown/main.js')], bundle: true, write: false, platform: 'browser', format: 'iife' }).outputFiles[0]!.text
+function countdownFor(props: Record<string, unknown>) {
+  const nodes = new Map<string, { textContent: string, hidden: boolean, dataset: Record<string, string> }>()
+  const node = (selector: string) => {
+    if (!nodes.has(selector)) nodes.set(selector, { textContent: '', hidden: false, dataset: {} })
+    return nodes.get(selector)!
+  }
+  const card = { dataset: {} as Record<string, string>, querySelector: node }
+  class Clock extends Date { static now() { return 0 } }
+  runInNewContext(countdownScript, { document: { querySelector: () => card }, window: { widget: { props, lang: 'zh', t: (key: string) => key, onProps: () => {}, onPause: () => {} } }, Date: Clock, Intl, setInterval: () => 1, clearInterval: () => {} })
+  return { phase: card.dataset.phase, message: node('[data-role="empty"]').textContent, minutes: Number(node('[data-role="days"]').textContent) * 1440 + Number(node('[data-role="hours"]').textContent) * 60 + Number(node('[data-role="minutes"]').textContent) }
+}
+
+describe('倒计时时区', () => {
+  it('拒绝不存在的夏令时墙上时间与未知时区', () => {
+    expect(countdownFor({ date: '2026-03-08', time: '02:30', zone: 'America/New_York' }).phase).toBe('empty')
+    expect(countdownFor({ date: '2026-03-08', time: '02:30', zone: 'Invalid/Zone' }).phase).toBe('empty')
+  })
+  it('重复时间必须选择偏移，两个有效偏移相差一小时', () => {
+    const props = { date: '2026-11-01', time: '01:30', zone: 'America/New_York' }
+    expect(countdownFor(props).phase).toBe('empty')
+    const early = countdownFor({ ...props, offsetMinutes: -240 })
+    const late = countdownFor({ ...props, offsetMinutes: -300 })
+    expect(early.phase).toBe('remaining')
+    expect(late.minutes - early.minutes).toBe(60)
+    expect(countdownFor({ ...props, offsetMinutes: 480 }).phase).toBe('empty')
+  })
+})
 
 /** 一份带对象、数组与两种兜底写法的 schema。 */
 const SCHEMA = {

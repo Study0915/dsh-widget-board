@@ -23,6 +23,12 @@ async function markdownPass(page, check) {
   await visualContractPass(page, check)
   await mediaPass(page, check)
   await campusPass(page, check)
+  await page.waitForFunction(async () => {
+    const workspace = await (await fetch('api/widget-board/boards')).json()
+    return document.querySelector('.dsh-widget-board__flow[data-active="true"]')?.getAttribute('data-dsh-widget-board-board') === workspace.active
+  }, undefined, { timeout: 5000 })
+  // 媒体与校园场景刚移除的卡片仍在播放作者的退场动画，先等它真正离开再记数量。
+  await page.waitForFunction(() => document.querySelector('[data-instance][data-exiting="true"]') === null, undefined, { timeout: 5000 })
   const before = await page.evaluate(() => document.querySelectorAll('[data-instance]').length)
   await openLibrary(page)
   await page.waitForSelector('[data-dsh-widget-board-add="markdown"]:visible', { timeout: 10000 })
