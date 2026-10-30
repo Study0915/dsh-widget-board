@@ -10,6 +10,12 @@ import { openWorkspace } from '../src/workspace'
 import { emptyBoard, writeBoard } from '../src/state'
 import { packBoard, unpackBoard } from '../src/package'
 import { boardFromPackage } from '../src/media/board-package'
+import { watch } from 'node:fs'
+import { importTransaction } from '../src/media/import-transaction'
+import { writeWidgetType } from '../src/widget-write/write'
+import { contentHash, readWidget } from '../src/library'
+import type { RouteContext } from '../src/routes'
+import type { WidgetRecord } from '../src/library'
 
 const homes: string[] = []
 afterEach(async () => { for (const home of homes.splice(0)) await rm(home, { recursive: true, force: true }) })
@@ -157,4 +163,38 @@ it('format1 可读，format2 压缩往返保留媒体与组/排列的新id', () 
   expect(restored.instances[0]?.id).not.toBe('old')
   expect(restored.arrangement?.aligned?.order).toEqual([restored.instances[0]?.id])
   expect(Object.keys(restored.arrangement?.aligned?.boxes ?? {})).toEqual([restored.instances[0]?.id])
+})
+
+it('导入回滚与源码保存交错时，不覆盖已经成功保存的新版本', async () => {
+  const test = await setup()
+  const root = { dir: join(test.home, 'widgets'), source: 'user' as const }
+  const records = new Map<string, WidgetRecord>()
+  const manifest = { id: 'race', title: { zh: '并发', en: 'Race' }, version: '0.1.0', sizes: ['s' as const] }
+  const refresh = async () => { records.set('race', await readWidget(join(root.dir, 'race'), { source: 'user' })) }
+  const write = async (html: string, expectedHash?: string, extra: { path: string, content: string }[] = [], reload = refresh) => await writeWidgetType({
+    roots: [root], records: () => records, reload,
+    request: { id: 'race', manifest, expectedHash, files: [{ path: 'index.html', content: html }, { path: 'style.css', content: '' }, ...extra] },
+  })
+  const original = await write('<p>原版</p>', undefined, Array.from({ length: 50 }, (_, index) => ({ path: `assets/${index}.txt`, content: 'x'.repeat(128 * 1024) })))
+  const files = new Map([['widget.json', Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`)], ['index.html', Buffer.from('<p>导入版</p>')], ['style.css', Buffer.from('')]])
+  const importedHash = contentHash(files)
+  const context = { roots: [root], records, refresh } as unknown as RouteContext
+  let concurrent: Promise<{ saved?: string, error?: unknown }> | undefined
+  const observer = watch(test.home, (_event, filename) => {
+    if (!String(filename).endsWith('.restore') || concurrent !== undefined) return
+    concurrent = write('<p>另一窗口的新版本</p>', importedHash).then(result => ({ saved: result.hash }), error => ({ error }))
+  })
+  try {
+    await expect(importTransaction(context, [{ manifest, hash: importedHash, files: Object.fromEntries([...files].map(([file, bytes]) => [file, bytes.toString('base64')])) }], async (_context, _id, _files, expectedHash, onSwapped) => {
+      await write('<p>导入版</p>', expectedHash, [], async () => { onSwapped?.(); await refresh() })
+    }, async () => { throw new Error('看板提交失败') })).rejects.toThrow('看板提交失败')
+    expect(concurrent, '必须在实际恢复目录写入时触发另一窗口保存').toBeDefined()
+    const result = await concurrent!
+    const persisted = await readWidget(join(root.dir, 'race'), { source: 'user' })
+    if (result.saved !== undefined) expect(persisted.hash).toBe(result.saved)
+    else {
+      expect(result.error).toMatchObject({ status: 409 })
+      expect(persisted.hash).toBe(original.hash)
+    }
+  } finally { observer.close() }
 })

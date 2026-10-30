@@ -255,14 +255,14 @@ export function CardSurface({
           setFailure(t('inlineDetached'))
           return
         }
-        if (preview) {
-          setFailure(t('previewNoAction'))
-          return
-        }
         if (message.id === 'widget-board:edit-content' || message.id === 'widget-board:campus-status') {
           const anchor = frame.closest<HTMLElement>('[data-dsh-widget-board-view]')
-          if (preview || anchor === null) { setFailure('预览不能修改正式卡片'); return }
+          if (preview || anchor === null) { setFailure(t('previewNoAction')); return }
           void campusAction(instance.id, message.id, message.payload, anchor, themeRef.current, frames, () => live).then(() => { settleAction() }, settleAction)
+          return
+        }
+        if (preview) {
+          setFailure(t('previewNoAction'))
           return
         }
         sendInstanceAction(instance.id, message.id, message.payload).then(() => { settleAction() }, settleAction)
@@ -290,6 +290,7 @@ export function CardSurface({
         data: data ?? null,
         state: state ?? null,
         text,
+        ...(widget.availableCapabilities === undefined ? {} : { capabilities: widget.availableCapabilities }),
       })
       if (pausedRef.current) send({ type: 'pause' })
     }

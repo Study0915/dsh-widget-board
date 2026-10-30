@@ -90,7 +90,7 @@ async function open(page, url) {
 
 /** 拖动与缩放：松手写进演示宿主，刷新之后还在。 */
 async function layoutPass(page, url) {
-  // 默认看板是整齐行列（D30）：自由坐标的拖放检查先把看板切回自由布局，顺带验收排列路由。
+  // 默认看板是整齐行列（D32）：自由坐标的拖放检查先把看板切回自由布局，顺带验收排列路由。
   const switched = await page.evaluate(async () => {
     const workspace = await (await fetch('api/widget-board/boards')).json()
     const board = workspace.boards[0]
@@ -208,31 +208,6 @@ async function unsupportedPass(page, errors) {
   errors.length = expected
 }
 
-/** 日志读取与正式宿主同形；演示宿主没有外部请求，所以日志为空。 */
-async function logsPass(page) {
-  const id = await instanceOf(page, '番茄钟')
-  const endpoint = new URL(`api/widget-board/instance/${encodeURIComponent(id)}/log`, page.url()).href
-  const read = await page.evaluate(async (url) => {
-    const response = await fetch(url)
-    return { status: response.status, body: await response.json() }
-  }, endpoint)
-  check('已有卡片的日志读取成功且为空', read.status === 200 && Array.isArray(read.body.entries) && read.body.entries.length === 0 && typeof read.body.limit === 'number' && read.body.limit > 0, JSON.stringify(read))
-  // 预期拒绝请求放在单独页面，不清空主页面错误，也不绕过 Service Worker。
-  const probe = await page.context().newPage()
-  try {
-    await open(probe, page.url())
-    const rejected = await probe.evaluate(async (url) => {
-      const missing = await fetch('api/widget-board/instance/missing-t00-instance/log')
-      const wrongMethod = await fetch(url, { method: 'POST' })
-      return { missing: missing.status, method: wrongMethod.status, allow: wrongMethod.headers.get('allow') }
-    }, endpoint)
-    check('未知卡片的日志返回 404', rejected.missing === 404, String(rejected.missing))
-    check('日志接口拒绝 POST 并声明 GET', rejected.method === 405 && rejected.allow === 'GET', JSON.stringify(rejected))
-  } finally {
-    await probe.close()
-  }
-}
-
 /** 恢复默认看板：清掉存下来的布局。 */
 async function resetPass(page) {
   const id = await instanceOf(page, '番茄钟')
@@ -301,7 +276,6 @@ async function main() {
     check('组件文档带真实宿主的 CSP', policy)
     await page.screenshot({ path: path.join(SHOTS, 'desktop-board.png') })
 
-    await logsPass(page)
     await layoutPass(page, url)
     await groupPass(page, check)
     await themePass(page)

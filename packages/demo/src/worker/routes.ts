@@ -20,8 +20,7 @@ import type {
   InstanceStateRequest,
   WidgetMinBox,
 } from '@dsh-widget-board/contracts'
-import { FLIP_GROUP_BACK, FLIP_GROUP_FRONT, PLUGIN_ROUTE, REQUEST_LOG_LIMIT } from '@dsh-widget-board/contracts'
-import { VISIBILITY_LIMIT, VISIBILITY_PATH, isVisibilityReport } from '@dsh-widget-board/contracts'
+import { FLIP_GROUP_BACK, FLIP_GROUP_FRONT, PLUGIN_ROUTE, REQUEST_LOG_LIMIT, VISIBILITY_LIMIT, VISIBILITY_PATH, isVisibilityReport } from '@dsh-widget-board/contracts'
 import { isCardLayout } from '@dsh-widget-board/model'
 import { isRecord } from '../../../host/src/guards'
 import { BOARD_STATE_WRITES_PER_SECOND, STATE_WRITES_PER_SECOND, createRateLimiter } from '../../../host/src/limits'
@@ -124,7 +123,7 @@ async function requireInstance(context: DemoContext, id: string): Promise<{ boar
 }
 
 /**
- * 从看板上移除一个排列单元并写入：组卡按整组、普通卡按自己（D30）。
+ * 从看板上移除一个排列单元并写入：组卡按整组、普通卡按自己（D32）。
  *
  * @param context - 演示宿主上下文。
  * @param boardId - 看板 id。
@@ -210,13 +209,13 @@ async function addGroup(context: DemoContext, boardId: string, request: Request)
   await context.boards.save(boardId, (current) => {
     const added = withGroupAdded(current, front, back, layout === undefined ? {} : { layout })
     id = added.id
-    // 组在整齐偏好里占一格，单元 id 是正面实例的 id（D30）。
+    // 组在整齐偏好里占一格，单元 id 是正面实例的 id（D32）。
     return withArrangementUnits(added.board, [], groupUnitOf(added.board, id))
   }, { layoutChanged: true, event: () => ({ type: 'board' }) })
   return json(201, { id, snapshot: await context.boards.snapshot() })
 }
 
-/** 一次排列偏好的提交：真实宿主的 `POST /boards/<id>/arrangement`（D30）。 */
+/** 一次排列偏好的提交：真实宿主的 `POST /boards/<id>/arrangement`（D32）。 */
 async function submitArrangement(context: DemoContext, id: string, request: Request): Promise<Response> {
   const body = await jsonBody(request, LIMITS.layout)
   const valid = isRecord(body) && Number.isSafeInteger(body.expectedLayoutRevision) && (body.expectedLayoutRevision as number) >= 0
@@ -313,7 +312,7 @@ const ROUTES: Route[] = [
     async handle(_context, request) {
       const body = await jsonBody(request, VISIBILITY_LIMIT)
       if (!isVisibilityReport(body)) throw new Refusal(400, '可见性上报需要合法的 viewer 与 visible')
-      // 演示宿主没有数据源调度，也没有登记观众身份；校验上报但不声称已经记下可见集合。
+      // 演示宿主没有数据源调度；校验上报但不登记观众集合。
       return json(200, { ok: true, accepted: false })
     },
   },
@@ -363,7 +362,7 @@ const ROUTES: Route[] = [
       const group = body.group
       const board = await context.boards.findGroup(group)
       if (board === undefined) throw new Refusal(404, `看板上没有这一组：${group}`)
-      // 整组离开时它的排列单元一起离开（D30）。
+      // 整组离开时它的排列单元一起离开（D32）。
       await removeUnit(
         context,
         board.id,
@@ -423,7 +422,7 @@ const ROUTES: Route[] = [
       const id = decodeURIComponent(match[1] as string)
       const { board } = await requireInstance(context, id)
       await jsonBody(request, LIMITS.small)
-      // 这张卡代表的排列单元（组卡是整组）一起离开（D30）。
+      // 这张卡代表的排列单元（组卡是整组）一起离开（D32）。
       await removeUnit(
         context,
         board.id,

@@ -546,3 +546,9 @@ button, input, select, textarea { font-family: inherit; }
   border: 0;
   white-space: nowrap;
 }
+
+/* 已确认的紧凑排版以实际盒子为准；short 高度档不能代替 320px 边界。 */
+@media (max-width: 320px), (max-height: 320px) {
+  :root[data-box-width] .t-data { padding: var(--w-space-md, 12px); }
+  :root[data-box-width] .t-data__title { font-size: var(--w-type-body, 14px); }
+}
